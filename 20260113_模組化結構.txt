@@ -1,0 +1,140 @@
+正確的模組化結構
+invoice_project/
+└── app/
+    ├── main.py                 # FastAPI entry（只做 router 掛載）
+    ├── config.py
+
+    ├── api/                    # API Layer（通訊、協調）
+    │   ├── __init__.py
+    │   ├── invoice.py
+    │   ├── qr.py
+    │   └── ocr.py
+
+    ├── services/               # Application / Use Case
+    │   ├── __init__.py
+    │   ├── qr_service.py
+    │   ├── ocr_service.py
+    │   ├── invoice_flow.py     #「流程協調」(非常重要)
+    │   └── classify_service.py
+
+    ├── domain/                 # 核心業務模型（純 Python）
+    │   ├── __init__.py
+    │   ├── invoice.py
+    │   ├── item.py
+    │   └── enums.py
+
+    ├── infrastructure/         # 對外系統
+    │   ├── __init__.py
+    │   ├── google_sheets.py
+    │   └── storage.py
+
+    └── utils/                  # 技術工具（非業務）
+        └── image.py
+
+一、著手順序（工程師思維）
+
+建議從 「Domain → Services → API → Infrastructure」 的順序做：
+
+A. Domain：建立核心業務模型
+
+為什麼先做 Domain？
+- Service 層都依賴它
+- API 層也依賴它
+- 它是你的「系統核心概念」
+- 改動成本低 → 其他層可以照著調整
+
+應該做的事：
+1. 定義 Invoice 物件：
+- 日期（date）
+- 發票號碼（number）
+- 金額（total / tax）
+- 商品清單（list[Item]）
+- 類別（Category / enums）
+
+2. 定義 Item 物件：
+- 名稱
+- 單價
+- 數量
+- 小計
+
+3. 定義 enums.py：
+- InvoiceType（紙本 / QR）
+- Category（餐飲 / 辦公 / 其他）
+
+完成後，Parser / Classifier / Flow 都只依賴這個 Domain，不再直接操作字串或 dict。
+
+=================================
+B. Services：實作功能
+
+2-1 QR / OCR Service
+- qr_service.py → QRCode 解碼
+- ocr_service.py → OCR 文字抽取
+
+2-2 Invoice Flow
+- invoice_flow.py → 將整條流程串起來：
+	input → QR/OCR → Parser → Classifier → Output
+- API 呼叫它即可
+- Flow 裡只依賴 Services + Domain + Infrastructure，不依賴 API
+
+2-3 Classifier
+- AI 分類邏輯（可以先用簡單規則 + 後續替換 AI 模型）
+- 輸入：Invoice 物件
+- 輸出：填入 category
+
+=================================
+C. Infrastructure：外部依賴
+- google_sheets.py → 負責把結果存入 Google Sheet
+- storage.py → 其他可能需要的檔案存儲
+- 服務層調用它，不要 API 層直接調
+
+=================================
+D. API Layer：對外接口
+- api/invoice.py → 封裝整個流程
+	
+	from services.invoice_flow import process_invoice
+
+	@router.post("/invoice")
+	def scan_invoice(file: UploadFile):
+		invoice = process_invoice(file)
+		return invoice.to_dict()  # 轉 JSON
+
+- API 層只做：
+	- 驗證輸入格式
+	- 呼叫 invoice_flow
+	- 回傳結果
+
+===== ===== ===== ===== =====
+二、實務操作步驟
+
+1. 先搬 Domain
+	- 建立 Invoice, Item, Enums
+	- Parser、Classifier 都改成回傳 / 處理 Domain 物件
+
+2. 拆 Parser / Classifier
+	- Parser 只做文字到 Invoice 物件
+	- Classifier 只做 Invoice 物件分類
+
+3. 建立 invoice_flow.py
+	- Flow 將 QR / OCR / Parser / Classifier / Output 串起來
+	- API 層只呼叫這個 Flow
+
+4. 修改 API
+	- 只做驗證 + 呼叫 flow + 回傳 JSON
+
+5. 修改 Output / Infrastructure
+	- Sheets / Storage / DB 移到 infrastructure
+	- Flow 呼叫，不要 API 直接操作
+
+6. 測試每層
+	- Domain：簡單物件初始化
+	- Service：unit test QR / OCR / Parser
+	- Flow：整合測試
+	- API：fastAPI test client 或 Postman
+
+===== ===== ===== ===== =====
+三、下一階段可擴展目標
+
+1. 加 AI 模型分類器
+2. 支援多種發票來源（紙本 / QR / PDF）
+3. 多輸出支援（DB / Sheet / CSV）
+4. Client 端可以選擇 先做前處理（OCR / QR）再傳 JSON 或直接傳圖片
