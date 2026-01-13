@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List
-from enums import InvoiceType
-from item import Item
+from domain.enums import InvoiceType
+from domain.item import Item
 
 @dataclass
 class Invoice:

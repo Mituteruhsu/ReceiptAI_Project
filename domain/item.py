@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
-from enums import Category, SubCategory
+from domain.enums import Category, SubCategory
 
 @dataclass
 class Item:
