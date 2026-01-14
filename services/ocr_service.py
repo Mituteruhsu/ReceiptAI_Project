@@ -15,7 +15,3 @@ def extract_text(image_path: str) -> str:
 def test_ocr_service():
     text = extract_text("recive20220708.jpg")
     assert len(text) > 0
-    print(text)
-
-if __name__ == "__main__":
-    test_ocr_service()

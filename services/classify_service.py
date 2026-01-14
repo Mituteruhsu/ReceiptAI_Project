@@ -22,7 +22,3 @@ def test_classify():
     invoice = Invoice(number="AA", date="2026-01-13", total=100, items=[Item(name="餐點", qty=1, price=100)])
     category = classify_invoice(invoice)
     assert category.name == "FOOD"
-    print(invoice,category)
-
-if __name__ == "__main__":
-    test_classify()

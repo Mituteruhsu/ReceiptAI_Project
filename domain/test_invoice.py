@@ -1,5 +1,5 @@
-from invoice import Invoice, Item
-from enums import InvoiceType, Category, SubCategory
+from .invoice import Invoice, Item
+from .enums import InvoiceType, Category, SubCategory
 
 def test_invoice_creation():
     item1 = Item(name="餐廳", qty=2, price=150, category=Category.FOOD, sub_category=SubCategory.RESTAURANT)
@@ -11,6 +11,7 @@ def test_invoice_creation():
     assert invoice.items[0].category == Category.FOOD
     assert invoice.items[0].sub_category == SubCategory.RESTAURANT
 
+# 不可以 F5，使用 python -m domain.test_invoice 來執行此測試
 if __name__ == "__main__":
     test_invoice_creation()
     print("Step 1 Domain test passed!")

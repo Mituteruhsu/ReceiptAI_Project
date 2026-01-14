@@ -19,11 +19,6 @@ def parse_ocr(raw_text: str) -> Invoice:
 def test_parse():
     invoice_qr = parse_qr("AA12345678|2026-01-13|500")
     assert invoice_qr.number.startswith("AA")
-    print(invoice_qr)
 
     invoice_ocr = parse_ocr("發票號碼: BB87654321 金額: 800")
     assert invoice_ocr.total == 800
-    print(invoice_ocr)
-    
-if __name__ == "__main__":
-    test_parse()

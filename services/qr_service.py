@@ -1,26 +1,27 @@
-# services/qr_service.py
 from pyzbar.pyzbar import decode
 from PIL import Image
 
+
 def decode_qr(image_path: str) -> dict:
     """
-    輸入: QRCode 圖片路徑
-    輸出: dict {number, date, total, items=[]}
+    掃描圖片中所有 QR / Barcode
+    回傳已過濾的 QR 原始字串
     """
     image = Image.open(image_path)
     decoded_objs = decode(image)
-    if not decoded_objs:
-        return {}
 
-    # 假設只取第一個 QRCode
-    data_str = decoded_objs[0].data.decode('utf-8')
-    # 這裡暫時只回傳原始字串，後續 Parser 會解析
-    return {"raw_qr": data_str}
+    raw_qrs = []
 
-def test_qr_service():
-    result = decode_qr("recive20220708.jpg")
-    assert "raw_qr" in result
-    print(result)
+    for obj in decoded_objs:
+        try:
+            data = obj.data.decode("utf-8").strip()
+        except Exception:
+            continue
 
-if __name__ == "__main__":
-    test_qr_service()
+        # 過濾太短或非可用資料
+        if len(data) < 8:
+            continue
+
+        raw_qrs.append(data)
+
+    return {"raw_qrs": raw_qrs}
