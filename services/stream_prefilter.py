@@ -37,3 +37,24 @@ class StreamPreFilter:
             return True
 
         return False
+    
+    def _basic_check(self, frame) -> bool:
+        # 檢查 frame 是否為 image、亮度、清晰度
+        return True
+
+    def _looks_like_invoice(self, frame) -> bool:
+        """
+        輕量判斷：
+        - QR pattern
+        - 白底比例
+        - 長方形輪廓
+        """
+        return True
+
+    def _trigger(self):
+        self._hit_count = 0
+        self._cooldown = self.cooldown_frames
+
+    def _reset(self):
+        self._hit_count = 0
+

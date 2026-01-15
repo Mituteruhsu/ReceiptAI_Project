@@ -138,3 +138,74 @@ D. API Layer：對外接口
 2. 支援多種發票來源（紙本 / QR / PDF）
 3. 多輸出支援（DB / Sheet / CSV）
 4. Client 端可以選擇 先做前處理（OCR / QR）再傳 JSON 或直接傳圖片
+
+┌───────────────┐
+│           Client             │
+│  (Browser / iOS / Android)   │
+└──────┬────────┘
+              │ capture invoice image
+              ▼
+      ┌──────────┐
+      │  Preprocessing /   │
+      │  Device-side Logic │
+      └────┬─────┘
+                │
+        ┌───┴─────┐
+        │                  │
+        ▼                  ▼
+  ┌──────┐   ┌──────┐
+  │ Is it QR?  │   │ OCR attempt│
+  └───┬──┘   └────┬─┘
+          │ yes               │ success
+          ▼                   ▼
+  ┌───────┐    ┌────────┐
+  │ Decode QR    │    │ Return Raw     │
+  │ Extract Data │    │ Invoice JSON   │
+  └───┬───┘    └────────┘
+          │
+  ┌───┴─────┐
+  │ Return Raw JSON  │
+  └───┬─────┘
+          │
+          ▼
+ ┌───────────────┐
+ │  Send to Backend API Layer   │
+ │  (app/api/invoice.py)        │
+ └──────┬────────┘
+               │
+               ▼
+  ┌─────────────┐
+  │     invoice_flow.py      │
+  │   (app/services/)        │
+  └────┬────────┘
+            │
+    ┌───┴─────┐
+    ▼                  ▼
+ ┌────────┐  ┌────────┐
+ │  QR Service    │  │  OCR Service   │
+ │ qr_service.py  │  │ ocr_service.py │
+ └───┬────┘  └──┬─────┘
+         │                  │
+         └───┬─────┘
+                 ▼
+       ┌──────────┐
+       │ Invoice Parser     │
+       │ invoice_parser.py  │
+       └────┬─────┘
+                 │
+                 ▼
+       ┌──────────┐
+       │ AI Classifier      │
+       │ classify_service.py│
+       └────┬─────┘
+                 │
+                 ▼
+       ┌──────────┐
+       │ Output / Sheets    │
+       │ google_sheets.py   │
+       └────┬─────┘
+                 │
+                 ▼
+           Return Result
+           JSON Response
+           to Client
