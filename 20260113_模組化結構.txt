@@ -209,3 +209,18 @@ D. API Layer：對外接口
            Return Result
            JSON Response
            to Client
+
+Client 與 Backend 的責任切分
+Client（Web / iOS / Android）
+
+- 拍照 / 上傳圖片
+- 如果裝置有能力：
+	QR 解碼
+	OCR 文字擷取
+- 把「結果 + 原始資料」一起傳給後端 Backend（Django）
+- 不假設 Client 一定有做
+- 根據 payload 判斷：
+	已有 QR → 不再 decode
+	已有 OCR → 不再 OCR
+	都沒有 → 自己來
+

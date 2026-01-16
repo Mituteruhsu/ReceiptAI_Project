@@ -40,25 +40,34 @@ python manage.py startapp infrastructure
 - 結構大概長這樣：
 ReceiptAI_Project/
 ├── manage.py
-├── ReceiptAI_Project/
-│   ├── settings.py
-│   └── urls.py
-├── api/
-│   ├── views.py
-│   ├── urls.py
-│   └── serializers.py
-├── services/
-│   ├── qr_service.py
-│   ├── ocr_service.py
-│   ├── invoice_flow.py
-│   └── classify_service.py
-├── domain/
-│   ├── invoice.py
-│   ├── item.py
-│   └── enums.py
-├── infrastructure/
-│   ├── google_sheets.py
-│   └── storage.py
+├─┬ ReceiptAI_Project/
+│  ├── settings.py
+│  └── urls.py
+├─┬ api/
+│  ├── views.py
+│  ├── urls.py
+│  └── serializers.py
+├─┬ services/
+│  ├── qr_service.py
+│  ├── ocr_service.py
+│  ├── invoice_flow.py
+│  ├── image_adapter.py
+│  ├── invoice_parser.py
+│  ├── models.py
+│  ├── stream_prefilter.py
+│  └── classify_service.py
+├─┬ ReceiptAI_Project/
+│  ├── asgi.py
+│  ├── setting.py
+│  ├── wsgi.py
+│  └── urls.py
+├─┬ domain/
+│  ├── invoice.py
+│  ├── item.py
+│  └── enums.py
+├─┬ infrastructure/
+│  ├── google_sheets.py
+│  └── storage.py
 
 - 每個 app 都要在 ReceiptAI_Project/settings.py 的 INSTALLED_APPS 加入
 INSTALLED_APPS = [
