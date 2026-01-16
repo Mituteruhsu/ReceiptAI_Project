@@ -2,106 +2,178 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>Receipt AI - Camera Fallback</title>
+<title>Receipt AI - Camera Assist</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
+<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+
 <style>
-  body { font-family: sans-serif; padding: 16px; }
-  video, canvas { width: 100%; max-width: 420px; border: 1px solid #ccc; }
-  #hint { margin: 8px 0; color: #555; }
-  button { margin-top: 8px; padding: 10px 16px; }
+#container { position: relative; width: 100%; max-width: 420px; }
+video, canvas { width: 100%; }
+#overlay {
+  position: absolute;
+  border: 3px dashed red;
+  top: 0; left: 0;
+  pointer-events: none;
+}
+#hint {
+  margin-top: 8px;
+  font-weight: bold;
+}
 </style>
 </head>
 
 <body>
 
-<h2>發票拍攝</h2>
+<h2>發票拍照輔助（Web）</h2>
 
-<div id="cameraArea" style="display:none">
-  <video id="video" playsinline autoplay></video>
-  <div id="hint">請將發票完整置於畫面內</div>
-  <button onclick="capture()">拍照</button>
+<input type="file" id="fileInput" accept="image/*" capture="environment">
+
+<button onclick="startCamera()">📷 開啟攝像頭</button>
+<button onclick="captureFrame()">📸 拍照</button>
+
+<div id="container">
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+  <div id="overlay"></div>
 </div>
 
-<div id="fallbackArea" style="display:none">
-  <p>此環境不支援即時攝影機，請直接拍照上傳</p>
-  <input type="file" accept="image/*" capture="environment" onchange="onFile(this)">
-</div>
-
-<canvas id="canvas" style="display:none"></canvas>
+<div id="hint"></div>
 
 <script>
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
+const overlay = document.getElementById("overlay");
+const hint = document.getElementById("hint");
 
-const cameraArea = document.getElementById("cameraArea");
-const fallbackArea = document.getElementById("fallbackArea");
+let stream = null;
 
-// =========================
-// 能力偵測（關鍵）
-// =========================
-function canUseCamera() {
-  return (
-    window.isSecureContext &&
-    navigator.mediaDevices &&
-    typeof navigator.mediaDevices.getUserMedia === "function"
-  );
+// ==========================
+// 開啟攝像頭（即時輔助）
+// ==========================
+async function startCamera() {
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment" }
+  });
+  video.srcObject = stream;
+
+  requestAnimationFrame(analyzeFrame);
 }
 
-// =========================
-// 初始化
-// =========================
-(async function init() {
-  if (canUseCamera()) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false
-      });
-      video.srcObject = stream;
-      cameraArea.style.display = "block";
-    } catch (err) {
-      console.warn("Camera error:", err);
-      fallbackArea.style.display = "block";
-    }
-  } else {
-    fallbackArea.style.display = "block";
+// ==========================
+// 即時影像分析（輔助用）
+// ==========================
+function analyzeFrame() {
+  if (!video.videoWidth) {
+    requestAnimationFrame(analyzeFrame);
+    return;
   }
-})();
 
-// =========================
-// 拍照（即時攝影機）
-// =========================
-function capture() {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   ctx.drawImage(video, 0, 0);
-  canvas.style.display = "block";
 
-  canvas.toBlob(blob => {
-    handleImage(blob);
-  }, "image/jpeg", 0.9);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  const sharpness = calcSharpness(imageData);
+  const brightness = calcBrightness(imageData);
+
+  let messages = [];
+
+  if (sharpness < 80) messages.push("請靠近或保持穩定");
+  if (brightness < 80) messages.push("環境光線不足");
+  if (brightness > 200) messages.push("畫面過亮");
+
+  hint.textContent = messages.join(" / ") || "畫面良好";
+
+  if (typeof cv !== "undefined") {
+    detectInvoiceContour();
+  }
+
+  requestAnimationFrame(analyzeFrame);
 }
 
-// =========================
-// fallback 檔案上傳
-// =========================
-function onFile(input) {
-  const file = input.files[0];
-  if (file) handleImage(file);
+// ==========================
+// 清晰度（Laplacian variance）
+// ==========================
+function calcSharpness(imageData) {
+  let src = cv.matFromImageData(imageData);
+  let gray = new cv.Mat();
+  let lap = new cv.Mat();
+
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+  cv.Laplacian(gray, lap, cv.CV_64F);
+
+  let mean = new cv.Mat();
+  let std = new cv.Mat();
+  cv.meanStdDev(lap, mean, std);
+
+  const variance = std.doubleAt(0, 0) ** 2;
+
+  src.delete(); gray.delete(); lap.delete();
+  mean.delete(); std.delete();
+
+  return variance;
 }
 
-// =========================
-// 共用處理入口
-// =========================
-function handleImage(fileOrBlob) {
-  console.log("image ready:", fileOrBlob);
+// ==========================
+// 亮度判斷
+// ==========================
+function calcBrightness(imageData) {
+  let sum = 0;
+  for (let i = 0; i < imageData.data.length; i += 4) {
+    sum += imageData.data[i];
+  }
+  return sum / (imageData.data.length / 4);
+}
 
-  // 這裡之後接你的：
-  // - base64
-  // - 前端 CV 分析
-  // - 傳給 /api/invoice/upload/
+// ==========================
+// 發票輪廓偵測（最大矩形）
+// ==========================
+function detectInvoiceContour() {
+  let src = cv.imread(canvas);
+  let gray = new cv.Mat();
+  let edges = new cv.Mat();
+
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+  cv.Canny(gray, edges, 75, 200);
+
+  let contours = new cv.MatVector();
+  let hierarchy = new cv.Mat();
+  cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+  let best = null;
+  let maxArea = 0;
+
+  for (let i = 0; i < contours.size(); i++) {
+    let rect = cv.boundingRect(contours.get(i));
+    let area = rect.width * rect.height;
+    if (area > maxArea) {
+      maxArea = area;
+      best = rect;
+    }
+  }
+
+  if (best) {
+    overlay.style.width = best.width + "px";
+    overlay.style.height = best.height + "px";
+    overlay.style.left = best.x + "px";
+    overlay.style.top = best.y + "px";
+  }
+
+  src.delete(); gray.delete(); edges.delete();
+  contours.delete(); hierarchy.delete();
+}
+
+// ==========================
+// 拍照（保留原圖給後端）
+// ==========================
+function captureFrame() {
+  ctx.drawImage(video, 0, 0);
+  stream.getTracks().forEach(t => t.stop());
+  alert("已拍照，可送後端分析");
 }
 </script>
 
