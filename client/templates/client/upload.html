@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Receipt AI - Camera Fallback</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+  body { font-family: sans-serif; padding: 16px; }
+  video, canvas { width: 100%; max-width: 420px; border: 1px solid #ccc; }
+  #hint { margin: 8px 0; color: #555; }
+  button { margin-top: 8px; padding: 10px 16px; }
+</style>
+</head>
+
+<body>
+
+<h2>發票拍攝</h2>
+
+<div id="cameraArea" style="display:none">
+  <video id="video" playsinline autoplay></video>
+  <div id="hint">請將發票完整置於畫面內</div>
+  <button onclick="capture()">拍照</button>
+</div>
+
+<div id="fallbackArea" style="display:none">
+  <p>此環境不支援即時攝影機，請直接拍照上傳</p>
+  <input type="file" accept="image/*" capture="environment" onchange="onFile(this)">
+</div>
+
+<canvas id="canvas" style="display:none"></canvas>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const cameraArea = document.getElementById("cameraArea");
+const fallbackArea = document.getElementById("fallbackArea");
+
+// =========================
+// 能力偵測（關鍵）
+// =========================
+function canUseCamera() {
+  return (
+    window.isSecureContext &&
+    navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getUserMedia === "function"
+  );
+}
+
+// =========================
+// 初始化
+// =========================
+(async function init() {
+  if (canUseCamera()) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false
+      });
+      video.srcObject = stream;
+      cameraArea.style.display = "block";
+    } catch (err) {
+      console.warn("Camera error:", err);
+      fallbackArea.style.display = "block";
+    }
+  } else {
+    fallbackArea.style.display = "block";
+  }
+})();
+
+// =========================
+// 拍照（即時攝影機）
+// =========================
+function capture() {
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+  canvas.style.display = "block";
+
+  canvas.toBlob(blob => {
+    handleImage(blob);
+  }, "image/jpeg", 0.9);
+}
+
+// =========================
+// fallback 檔案上傳
+// =========================
+function onFile(input) {
+  const file = input.files[0];
+  if (file) handleImage(file);
+}
+
+// =========================
+// 共用處理入口
+// =========================
+function handleImage(fileOrBlob) {
+  console.log("image ready:", fileOrBlob);
+
+  // 這裡之後接你的：
+  // - base64
+  // - 前端 CV 分析
+  // - 傳給 /api/invoice/upload/
+}
+</script>
+
+</body>
+</html>
