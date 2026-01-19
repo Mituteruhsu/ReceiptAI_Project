@@ -1,4 +1,15 @@
 # services/stream_prefilter.py
+# 後端：
+# services/stream_prefilter.py  
+#   ├─ 保留（作為文檔/參考）
+#   ├─ 不被代碼引入
+#   └─ 可加 docstring 說明這是前端實現的參考
+
+# 前端：
+# client/templates/client/js/stream_prefilter.js
+#   ├─ 實際使用
+#   ├─ main.js 調用
+#   └─ 控制觸發邏輯
 
 class StreamPreFilter:
     def __init__(

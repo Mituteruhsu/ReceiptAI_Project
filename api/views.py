@@ -1,3 +1,5 @@
+import base64
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -6,6 +8,18 @@ from api.serializers import InvoiceUploadSerializer
 from services.invoice_flow import process_invoice
 from services.image_adapter import adapt_to_image, ImageAdapterError
 
+def process_invoice_internal(*, image_base64: str, meta: dict):
+    image_bytes = base64.b64decode(image_base64)
+
+    result = process_invoice(
+        image_bytes=image_bytes,
+        meta=meta
+    )
+
+    return {
+        "status": "ok",
+        "invoice": result
+    }
 
 class InvoiceUploadView(APIView):
     """

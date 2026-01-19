@@ -1,6 +1,5 @@
 from rest_framework import serializers
 
-
 class DeviceInfoSerializer(serializers.Serializer):
     platform = serializers.CharField(required=False)
     has_qr = serializers.BooleanField(required=False)

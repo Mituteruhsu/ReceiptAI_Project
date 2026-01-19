@@ -43,6 +43,11 @@ ReceiptAI_Project/
 ├─┬ ReceiptAI_Project/
 │  ├── settings.py
 │  └── urls.py
+├─┬ client/
+│  ├── views.py
+│  ├── urls.py
+│  ├ templates/client/
+│  └── upload.html
 ├─┬ api/
 │  ├── views.py
 │  ├── urls.py
