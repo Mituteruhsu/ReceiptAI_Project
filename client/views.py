@@ -32,6 +32,9 @@ def upload_invoice(request):
 
     return JsonResponse(result)
 
+def ios(request):
+    return render(request, "client/ios.html")
+
 def iostest(request):
     return render(request, "client/iostest.html")
 
