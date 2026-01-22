@@ -1,125 +1,32 @@
-/* client/templates/client/css/style.css */
-
-/* ================================
-   容器和視頻樣式
-   ================================ */
-#container {
-  position: relative;
-  width: 100%;
-  max-width: 420px;
+ body {
+	background: #0f172a;
+	color: #e5e7eb;
 }
 
-video, canvas {
-  width: 100%;
+video, canvas, img {
+	width: 100%;
+	border-radius: 8px;
 }
 
-/* ================================
-   輪廓框（發票邊界檢測）
-   ================================ */
 #overlay {
-  position: absolute;
-  border: 3px dashed red;
-  top: 0;
-  left: 0;
-  pointer-events: none;
+	position: absolute;
+	top: 0;
+	left: 0;
+	pointer-events: none;
 }
 
-/* ================================
-   提示信息
-   ================================ */
-#hint {
-  margin-top: 8px;
-  font-weight: bold;
+.panel {
+	background: #020617;
+	padding: 12px;
+	border-radius: 8px;
+	font-size: 14px;
 }
 
-/* ================================
-   狀態提示樣式
-   ================================ */
-.status {
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 5px;
-  font-size: 14px;
+.metric {
+	display: flex;
+	justify-content: space-between;
 }
 
-.status.success {
-  background-color: #d4edda;
-  color: #155724;
-}
-
-.status.warning {
-  background-color: #fff3cd;
-  color: #856404;
-}
-
-.status.error {
-  background-color: #f8d7da;
-  color: #721c24;
-}
-
-/* ================================
-   按鈕樣式
-   ================================ */
-button {
-  padding: 8px 16px;
-  margin: 5px;
-  font-size: 14px;
-  border: none;
-  border-radius: 4px;
-  background-color: #007bff;
-  color: white;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-button:hover {
-  background-color: #0056b3;
-}
-
-button:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
-/* ================================
-   文件輸入樣式
-   ================================ */
-input[type="file"] {
-  padding: 5px;
-  margin: 10px 0;
-}
-
-/* ================================
-   主體樣式
-   ================================ */
-body {
-  font-family: Arial, sans-serif;
-  max-width: 500px;
-  margin: 20px auto;
-  padding: 10px;
-}
-
-h2 {
-  color: #333;
-  text-align: center;
-}
-
-/* ================================
-   預覽圖容器
-   ================================ */
-#preview-container {
-  width: 100%;
-  margin: 15px auto;
-  padding: 0;
-  text-align: center;
-  box-sizing: border-box;
-}
-
-#preview-container img {
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  display: block;
+label {
+	font-size: 13px;
 }
