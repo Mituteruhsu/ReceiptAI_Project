@@ -1,43 +1,69 @@
 // ================== DOM ==================
+// ----- 左側: Camera -----
+// <!-- 即時相機 -->
 const video = document.getElementById("video");
 const overlay = document.getElementById("overlay");
-const octx = overlay.getContext("2d");
-
 const captureCanvas = document.getElementById("captureCanvas");
-const cctx = captureCanvas.getContext("2d");
 
-const editCanvas = document.getElementById("editCanvas");
-const ectx = editCanvas.getContext("2d");
-
-const previewImg = document.getElementById("previewImage");
-const previewEmpty = document.getElementById("previewEmpty");
-const previewActions = document.getElementById("previewActions");
-const editControls = document.getElementById("editControls");
-
+// <!-- 拍攝品質 -->
 const sharpnessMetric = document.getElementById("sharpnessMetric");
 const brightnessMetric = document.getElementById("brightnessMetric");
 const contrastMetric = document.getElementById("contrastMetric");
+
+// <!-- Camera Controls -->
+document.getElementById("startBtn").onclick = startCamera;
+document.getElementById("stopBtn").onclick = stopCamera;
+document.getElementById("captureBtn").onclick = capturePhoto;
+
+// <!-- Zoom 數位 / 硬體變焦 -->
+const zoomSlider = document.getElementById("zoomSlider");
+
+// ----- 右側: Upload / Preview / Edit -----
+
+// ===== panel =====
+// <!-- Upload -->
+const fileInput = document.getElementById("fileInput");
+fileInput.addEventListener("change", handleFileUpload);
+
+// <!-- Preview Image -->
+const previewImg = document.getElementById("previewImage");
+
+// <!-- Edit Canvas -->
+const editCanvas = document.getElementById("editCanvas");
+
+// <!-- Edit Sliders -->
+const editControls = document.getElementById("editControls");
 
 const brightnessInput = document.getElementById("brightness");
 const contrastInput = document.getElementById("contrast");
 const sharpnessInput = document.getElementById("sharpness");
 
-const zoomSlider = document.getElementById("zoomSlider");
+// <!-- Actions -->
+const previewActions = document.getElementById("previewActions");
+
+const cancelBtn = document.getElementById("cancelBtn");
+const uploadBtn = document.getElementById("uploadBtn");
+cancelBtn.addEventListener("click", handleCancel);
+uploadBtn.addEventListener("click", handleUpload);
+
+// <!-- Empty -->
+const previewEmpty = document.getElementById("previewEmpty");
+
+// ================== Context ==================
+const octx = overlay.getContext("2d");
+const cctx = captureCanvas.getContext("2d");
+const ectx = editCanvas.getContext("2d");
 
 // ================== State ==================
-let stream = null;
-let videoTrack = null;
+let stream = null;      // for startCamera / stopCamera
+let videoTrack = null;  // for startCamera / stopCamera
 let analyzing = false;
 let zoomFactor = 1;
 let maxHardwareZoom = 1;
-
 let originalImage = null;
 
+// | Functions |
 // ================== Camera ==================
-document.getElementById("startBtn").onclick = startCamera;
-document.getElementById("stopBtn").onclick = stopCamera;
-document.getElementById("captureBtn").onclick = capturePhoto;
-
 async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -152,14 +178,14 @@ function capturePhoto() {
 }
 
 // ================== Upload Image ==================
-document.getElementById("fileInput").onchange = e => {
+function handleFileUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
     const img = new Image();
     img.onload = () => loadToEditor(img);
     img.src = URL.createObjectURL(file);
-};
+}
 
 // ================== Editor ==================
 function loadToEditor(img) {
@@ -226,9 +252,12 @@ function sharpen(img, amount) {
 }
 
 // ================== Actions ==================
-document.getElementById("cancelBtn").onclick = () => location.reload();
 
-document.getElementById("uploadBtn").onclick = () => {
+function handleCancel(){
+    location.reload();
+}
+
+function handleUpload() {
     editCanvas.toBlob(blob => {
         const form = new FormData();
         form.append("image", blob);
