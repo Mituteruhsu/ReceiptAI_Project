@@ -1,641 +1,190 @@
-// client/templates/client/js/camera_assist.js
-/*
- * 相機輔助系統 - 提供實時拍照品質反饋
- * 
- * 架構說明：
- * 1. 即時分析每一幀影像
- * 2. 品質指標（清晰度、亮度、對比度）
- * 3. 發票穩定偵測（StreamPreFilter）
- * 4. 發票區域框線與提示訊息
- * 5. 自動或手動拍照
- * 
- * 重要：這些只是「輔助」，不保證後端可用性
- */
+/* =========================
+   Camera Control
+========================= */
+const video = document.getElementById('video');
+const rawCanvas = document.getElementById('rawCanvas');
+const ocrCanvas = document.getElementById('ocrCanvas');
 
-class CameraAssist {
-    constructor() {
-        this.video = document.getElementById('video');
-        this.canvas = document.getElementById('canvas');
-        this.overlay = document.getElementById('invoice-overlay');
-        this.assistPanel = document.getElementById('assist-panel');
-        
-        this.ctx = this.canvas.getContext('2d');
+// <!-- Camera Controls -->
+document.getElementById("startBtn").onclick = startCamera;
+document.getElementById("stopBtn").onclick = stopCamera;
+document.getElementById("captureBtn").onclick = capturePhoto;
 
-        this.isAnalyzing = false;
-        this.messageHistory = [];
-        this.MAX_MESSAGES = 5;
+const ctxRaw = rawCanvas.getContext('2d');
+const ctxOCR = ocrCanvas.getContext('2d');
 
-        // StreamPreFilter
-        this.prefilter = new StreamPreFilter(5, 30);
+let stream = null;
 
-        // 拍照完成 callback
-        this.onCapture = null;
-    }
+async function startCamera() {
+    stream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+            facingMode: 'environment',
+            width: { ideal: 3840},
+            height: { ideal: 2160 },
+        },
+        audio: false
+    });
+    video.srcObject = stream;
+    videoTrack = stream.getVideoTracks()[0];
 
-    // ====================
-    // 啟動實時分析
-    // startRealTimeAnalysis()
-    // - requestAnimationFrame(analyze)
-    // ====================
-    startRealTimeAnalysis(stream) {
-        if (!stream) {
-            console.error('[CameraAssist] stream is required');
-            return;
-        }
+    const caps = videoTrack.getCapabilities();
+    if (caps.zoom) maxHardwareZoom = caps.zoom.max;
 
-        console.log('✓ 初始化相機輔助系統');
+    video.onloadedmetadata = () => {
+        overlay.width = video.videoWidth;
+        overlay.height = video.videoHeight;
+        analyzing = true;
+        requestAnimationFrame(analyzeFrame);
+    };
+}
 
-        this._bindStream(stream);
-        this._prepareVideo();
-    }
+function stopCamera() {
+    analyzing = false;
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+}
 
-    _bindStream(stream) {
-        this.video.srcObject = stream;
-        this.assistPanel.style.display = 'block';
-    }
+// ================== Capture ==================
+function capturePhoto() {
+    captureCanvas.width = video.videoWidth;
+    captureCanvas.height = video.videoHeight;
+    cctx.drawImage(video, 0, 0);
 
-    _prepareVideo() {
-        this.video.onloadedmetadata = () => {
-            this._onVideoReady();
-        };
-    }
+    const img = new Image();
+    img.onload = () => loadToEditor(img);
+    img.src = captureCanvas.toDataURL("image/jpeg", 1);
+}
 
-    async _onVideoReady() {
-        try {
-            await this.video.play();
+document.getElementById('uploadInput').onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => drawAndProcess(img);
+    img.src = URL.createObjectURL(file);
+};
 
-            this.isAnalyzing = true;
-            console.log('✓ 相機已啟動，開始分析');
+/* =========================
+   Capture / Load
+========================= */
+function captureFromVideo() {
+    rawCanvas.width = video.videoWidth;
+    rawCanvas.height = video.videoHeight;
+    ctxRaw.drawImage(video, 0, 0);
+    drawAndProcess(rawCanvas);
+}
 
-            this._startAnalyzeLoop();
-        } catch (err) {
-            console.error('❌ video.play() 失敗', err);
-            this.isAnalyzing = false;
-        }
-    }
+function drawAndProcess(source) {
+    ocrCanvas.width = source.width;
+    ocrCanvas.height = source.height;
+    ctxOCR.drawImage(source, 0, 0);
+    runPipeline();
+}
 
-    _startAnalyzeLoop() {
-        const tick = () => {
-            if (!this.isAnalyzing) return;
+/* =========================
+   OCR-friendly Pipeline
+========================= */
+function runPipeline() {
+    let imgData = ctxOCR.getImageData(0, 0, ocrCanvas.width, ocrCanvas.height);
 
-            if (this.video.videoWidth === 0) {
-                requestAnimationFrame(tick);
-                return;
-            }
+    grayscale(imgData);
+    normalize(imgData);
+    adaptiveThreshold(imgData, 15);
+    sharpen(imgData, 1.3);
 
-            this.analyzeFrame();
-            requestAnimationFrame(tick);
-        };
+    ctxOCR.putImageData(imgData, 0, 0);
+}
 
-        requestAnimationFrame(tick);
-    }
-
-    // ====================
-    // 停止實時分析
-    // stopRealTimeAnalysis()
-    // ====================
-    stopRealTimeAnalysis() {
-        this.isAnalyzing = false;
-        this.assistPanel.style.display = 'none';
-        console.log('✓ 相機輔助已停止');
-    }
-
-    // ====================
-    // 分析單一幀
-    // analyzeFrame()
-    // ====================
-    analyzeFrame() {
-        if (!this.video.videoWidth) return;
-
-        try {
-            // 畫幀到 canvas
-            this.canvas.width = this.video.videoWidth;
-            this.canvas.height = this.video.videoHeight;
-            this.ctx.drawImage(this.video, 0, 0);
-
-            // --- 品質檢測報告 ---
-            // 獲取品質指標
-            const report = imageProcessor.getQualityReport();
-            // 更新 UI
-            this.updateQualityIndicators(report);
-            this.updateMessages(report);
-            this.drawInvoiceOverlay(report.invoiceRect);
-
-            // ★ StreamPreFilter 判斷幀是否穩定可拍照
-            const readyToCapture = this.prefilter.feed(this.ctx, this.canvas);
-            // 自動拍照
-            if (readyToCapture) {
-                console.log("[CameraAssist] 幀穩定，自動拍照");
-                this.captureAuto();
-            }
-
-        } catch (error) {
-            console.error('分析幀失敗:', error);
-        }
-    }
-
-    // ====================
-    // 自動拍照
-    // captureAuto()
-    // ====================
-    captureAuto() {
-        if (!this.isAnalyzing) return;
-        this.isAnalyzing = false;
-
-        const dataUrl = this.canvas.toDataURL('image/jpeg', 0.95);
-        if (this.onCapture) this.onCapture(dataUrl);
-
-        console.log("📸 自動拍照完成");
-        this.stopRealTimeAnalysis();
-    }
-    
-    // ====================
-    // 手動拍照
-    // capturePhoto()
-    // ====================
-    capturePhoto() {
-        if (!this.video.videoWidth) return null;
-        const dataUrl = this.canvas.toDataURL('image/jpeg', 0.95);
-        if (this.onCapture) this.onCapture(dataUrl);
-        return dataUrl;
-    }
-
-    // ====================
-    // UI / 品質顯示(更新品質指標條)
-    // updateQualityIndicators(report)
-    // ====================
-    updateQualityIndicators(report) {
-        // 清晰度
-        this.updateIndicator('sharpness', report.sharpness, 70, 90);
-
-        // 亮度（理想範圍 80-200）
-        let brightnessScore = 0;
-        if (report.brightness < 50) {
-            brightnessScore = (report.brightness / 50) * 50;
-        } else if (report.brightness > 220) {
-            brightnessScore = ((255 - report.brightness) / 35) * 50 + 50;
-        } else {
-            brightnessScore = 100;
-        }
-        this.updateIndicator('brightness', Math.round(brightnessScore), 70, 90);
-
-        // 對比度（理想 > 40）
-        this.updateIndicator('contrast', report.contrast, 40, 60);
-    }
-
-    // ====================
-    // 更新單個指標
-    // updateIndicator(name, value, warningThreshold, errorThreshold)
-    // ====================
-    updateIndicator(name, value, warningThreshold, errorThreshold) {
-        const bar = document.getElementById(`${name}-bar`);
-        const valueSpan = document.getElementById(`${name}-value`);
-        const fill = bar.querySelector('.fill');
-
-        valueSpan.textContent = value;
-
-        // 計算百分比（限制 0-100）
-        const percent = Math.min(100, value);
-        fill.style.width = percent + '%';
-
-        // 根據閾值改變顏色
-        fill.className = 'fill';
-        if (value < errorThreshold) {
-            fill.classList.add('error');
-        } else if (value < warningThreshold) {
-            fill.classList.add('warning');
-        }
-    }
-
-    // ====================
-    // 更新使用者訊息
-    // updateMessages(report)
-    // ====================
-    updateMessages(report) {
-        const messages = [];
-
-        // 清晰度提示
-        if (report.sharpness < 50) {
-            messages.push('❌ 影像模糊 - 請穩定相機');
-        } else if (report.sharpness < 70) {
-            messages.push('⚠️ 請靠近或保持穩定');
-        } else {
-            messages.push('✓ 清晰度良好');
-        }
-
-        // 亮度提示
-        if (report.brightness < 50) {
-            messages.push('❌ 環境光線太暗 - 請移到亮處');
-        } else if (report.brightness < 80) {
-            messages.push('⚠️ 光線不足 - 建議在更亮的地方拍攝');
-        } else if (report.brightness > 220) {
-            messages.push('⚠️ 過度曝光 - 請避免強烈背光');
-        } else {
-            messages.push('✓ 亮度適中');
-        }
-
-        // 對比度提示
-        if (report.contrast < 30) {
-            messages.push('⚠️ 對比度低 - 請嘗試調整角度');
-        } else {
-            messages.push('✓ 對比度良好');
-        }
-
-        // 發票檢測提示
-        if (report.invoiceRect) {
-            messages.push('✓ 已檢測到發票');
-        } else {
-            messages.push('📋 請將發票對準鏡頭');
-        }
-
-        this.displayMessages(messages);
-    }
-
-    // ====================
-    // 顯示訊息
-    // displayMessages(messages)
-    // ====================
-    displayMessages(messages) {
-        const messageList = document.getElementById('message-list');
-        
-        // 最多顯示 5 條訊息
-        const displayMessages = messages.slice(0, this.MAX_MESSAGES);
-        
-        messageList.innerHTML = displayMessages
-            .map((msg, index) => {
-                let type = 'info';
-                if (msg.includes('✓')) type = 'success';
-                if (msg.includes('⚠️')) type = 'warning';
-                if (msg.includes('❌')) type = 'error';
-                
-                return `<div class="message ${type}">${msg}</div>`;
-            })
-            .join('');
-    }
-
-    // ====================
-    // 繪製發票框線
-    // drawInvoiceOverlay(rect)
-    // ====================
-    drawInvoiceOverlay(rect) {
-        if (!rect) {
-            this.overlay.style.display = 'none';
-            return;
-        }
-
-        this.overlay.style.display = 'block';
-        this.overlay.style.width = rect.width + 'px';
-        this.overlay.style.height = rect.height + 'px';
-        this.overlay.style.left = rect.x + 'px';
-        this.overlay.style.top = rect.y + 'px';
-    }
-
-    // ====================
-    // 獲取當前幀的 Base64
-    // getCurrentFrameBase64(quality)
-    // ====================
-    getCurrentFrameBase64(quality = 0.9) {
-        if (!this.video.videoWidth) {
-            console.error('影像尚未準備好');
-            return null;
-        }
-
-        this.canvas.width = this.video.videoWidth;
-        this.canvas.height = this.video.videoHeight;
-        const ctx = this.canvas.getContext('2d');
-        ctx.drawImage(this.video, 0, 0);
-
-        try {
-            const dataUrl = this.canvas.toDataURL('image/jpeg', quality);
-            return dataUrl.split(',')[1];
-        } catch (error) {
-            console.error('無法轉換為 Base64:', error);
-            return null;
-        }
-    }
-
-    // ====================
-    // 處理拍照（含前置處理）
-    // processCapture()
-    // ====================
-    async processCapture() {
-        const base64 = this.getCurrentFrameBase64();
-        if (!base64) {
-            showStatus('❌ 無法擷取影像', 'error');
-            return null;
-        }
-
-        // 注：實際的影像標準化（EXIF、Resize 等）在後端進行
-        // 前端只進行輕度增強（可選）
-        
-        return {
-            base64: base64,
-            quality: imageProcessor.getQualityReport(),
-            timestamp: new Date().toISOString()
-        };
+/* ===== Grayscale ===== */
+function grayscale(img) {
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+        const g = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+        d[i] = d[i+1] = d[i+2] = g;
     }
 }
 
-// ====================
-// StreamPreFilter Class 整合
-// ====================
-class StreamPreFilter {
-    constructor(stableFrames = 5, cooldownFrames = 30) {
-        this.stableFrames = stableFrames;
-        this.cooldownFrames = cooldownFrames;
-        this._hitCount = 0;
-        this._cooldown = 0;
+/* ===== Normalize (Mean / Std) ===== */
+function normalize(img) {
+    const d = img.data;
+    let sum = 0, sq = 0, n = d.length / 4;
+
+    for (let i = 0; i < d.length; i += 4) {
+        sum += d[i];
+        sq += d[i] * d[i];
     }
 
-    feed(ctx, canvas) {
-        if (this._cooldown > 0) { this._cooldown--; return false; }
-        if (!this._basicCheck(ctx, canvas)) { this._reset(); return false; }
-        if (this._looksLikeInvoice(ctx, canvas)) this._hitCount++;
-        else this._hitCount = 0;
-        if (this._hitCount >= this.stableFrames) { this._trigger(); return true; }
-        return false;
-    }
+    const mean = sum / n;
+    const std = Math.sqrt(sq / n - mean * mean) || 1;
 
-    _basicCheck(ctx, canvas) {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const brightness = this._calcBrightness(imageData);
-        const sharpness = this._calcSharpness(imageData);
-        if (brightness < 70 || brightness > 210) return false;
-        if (sharpness < 60) return false;
-        return true;
+    for (let i = 0; i < d.length; i += 4) {
+        let v = (d[i] - mean) / std * 40 + 128;
+        v = Math.max(0, Math.min(255, v));
+        d[i] = d[i+1] = d[i+2] = v;
     }
-
-    _calcBrightness(imageData) {
-        let sum = 0; const data = imageData.data;
-        for (let i=0;i<data.length;i+=4) sum += data[i];
-        return sum/(data.length/4);
-    }
-
-    _calcSharpness(imageData) {
-        if (typeof cv==='undefined') return 999;
-        let src=cv.matFromImageData(imageData), gray=new cv.Mat(), lap=new cv.Mat();
-        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-        cv.Laplacian(gray, lap, cv.CV_64F);
-        let mean=new cv.Mat(), std=new cv.Mat();
-        cv.meanStdDev(lap, mean, std);
-        const variance = std.doubleAt(0,0)**2;
-        src.delete(); gray.delete(); lap.delete(); mean.delete(); std.delete();
-        return variance;
-    }
-
-    _looksLikeInvoice(ctx, canvas) {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const whiteRatio = this._calcWhiteRatio(imageData);
-        return whiteRatio >= 0.45;
-    }
-
-    _calcWhiteRatio(imageData) {
-        const data = imageData.data; let whitePixels = 0;
-        for (let i=0;i<data.length;i+=4) {
-            const r=data[i], g=data[i+1], b=data[i+2];
-            if(r>200 && g>200 && b>200) whitePixels++;
-        }
-        return whitePixels / (data.length/4);
-    }
-
-    _trigger() { this._hitCount=0; this._cooldown=this.cooldownFrames; }
-    _reset() { this._hitCount=0; }
 }
 
-// =================================================
-// 以下 static/client/js/camera_assist.js
-// class CameraAssist {
-//     constructor() {
-//         this.video = document.getElementById('video');
-//         this.canvas = document.getElementById('canvas');
-//         this.overlay = document.getElementById('invoice-overlay');
-//         this.assistPanel = document.getElementById('assist-panel');
-        
-//         this.isAnalyzing = false;
-//         this.messageHistory = [];
-//         this.MAX_MESSAGES = 5;
-//     }
+/* ===== Adaptive Threshold ===== */
+function adaptiveThreshold(img, blockSize) {
+    const w = img.width, h = img.height;
+    const d = img.data;
+    const copy = new Uint8ClampedArray(d);
 
-//     /**
-//      * 啟動實時分析
-//      */
-//     startRealTimeAnalysis() {
-//         if (this.isAnalyzing) return;
-//         this.isAnalyzing = true;
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            let sum = 0, cnt = 0;
+            for (let dy = -blockSize; dy <= blockSize; dy++) {
+                for (let dx = -blockSize; dx <= blockSize; dx++) {
+                    const nx = x + dx, ny = y + dy;
+                    if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
+                        sum += copy[(ny * w + nx) * 4];
+                        cnt++;
+                    }
+                }
+            }
+            const idx = (y * w + x) * 4;
+            const thresh = sum / cnt - 5;
+            const v = d[idx] > thresh ? 255 : 0;
+            d[idx] = d[idx+1] = d[idx+2] = v;
+        }
+    }
+}
 
-//         console.log('✓ 相機輔助已啟動');
-//         this.assistPanel.style.display = 'block';
+/* ===== Mild Sharpen ===== */
+function sharpen(img, strength = 1.3) {
+    const w = img.width, h = img.height;
+    const d = img.data;
+    const copy = new Uint8ClampedArray(d);
 
-//         const analyze = () => {
-//             if (!this.isAnalyzing) return;
+    const k = [
+         0, -1,  0,
+        -1,  4 * strength, -1,
+         0, -1,  0
+    ];
 
-//             this.analyzeFrame();
-//             requestAnimationFrame(analyze);
-//         };
+    for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+            let sum = 0;
+            let ki = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const idx = ((y + dy) * w + (x + dx)) * 4;
+                    sum += copy[idx] * k[ki++];
+                }
+            }
+            const i = (y * w + x) * 4;
+            const v = Math.max(0, Math.min(255, sum));
+            d[i] = d[i+1] = d[i+2] = v;
+        }
+    }
+}
 
-//         requestAnimationFrame(analyze);
-//     }
-
-//     /**
-//      * 停止實時分析
-//      */
-//     stopRealTimeAnalysis() {
-//         this.isAnalyzing = false;
-//         this.assistPanel.style.display = 'none';
-//         console.log('✓ 相機輔助已停止');
-//     }
-
-//     /**
-//      * 分析單一幀
-//      */
-//     analyzeFrame() {
-//         if (!this.video.videoWidth) return;
-
-//         try {
-//             // 複製幀到 canvas
-//             this.canvas.width = this.video.videoWidth;
-//             this.canvas.height = this.video.videoHeight;
-//             const ctx = this.canvas.getContext('2d');
-//             ctx.drawImage(this.video, 0, 0);
-
-//             // 獲取品質指標
-//             const report = imageProcessor.getQualityReport();
-
-//             // 更新 UI
-//             this.updateQualityIndicators(report);
-//             this.updateMessages(report);
-//             this.drawInvoiceOverlay(report.invoiceRect);
-
-//         } catch (error) {
-//             console.error('分析幀失敗:', error);
-//         }
-//     }
-
-//     /**
-//      * 更新品質指標條
-//      */
-//     updateQualityIndicators(report) {
-//         // 清晰度
-//         this.updateIndicator('sharpness', report.sharpness, 70, 90);
-
-//         // 亮度（理想範圍 80-200）
-//         let brightnessScore = 0;
-//         if (report.brightness < 50) {
-//             brightnessScore = (report.brightness / 50) * 50;
-//         } else if (report.brightness > 220) {
-//             brightnessScore = ((255 - report.brightness) / 35) * 50 + 50;
-//         } else {
-//             brightnessScore = 100;
-//         }
-//         this.updateIndicator('brightness', Math.round(brightnessScore), 70, 90);
-
-//         // 對比度（理想 > 40）
-//         this.updateIndicator('contrast', report.contrast, 40, 60);
-//     }
-
-//     /**
-//      * 更新單個指標
-//      */
-//     updateIndicator(name, value, warningThreshold, errorThreshold) {
-//         const bar = document.getElementById(`${name}-bar`);
-//         const valueSpan = document.getElementById(`${name}-value`);
-//         const fill = bar.querySelector('.fill');
-
-//         valueSpan.textContent = value;
-
-//         // 計算百分比（限制 0-100）
-//         const percent = Math.min(100, value);
-//         fill.style.width = percent + '%';
-
-//         // 根據閾值改變顏色
-//         fill.className = 'fill';
-//         if (value < errorThreshold) {
-//             fill.classList.add('error');
-//         } else if (value < warningThreshold) {
-//             fill.classList.add('warning');
-//         }
-//     }
-
-//     /**
-//      * 更新使用者訊息
-//      */
-//     updateMessages(report) {
-//         const messages = [];
-
-//         // 清晰度提示
-//         if (report.sharpness < 50) {
-//             messages.push('❌ 影像模糊 - 請穩定相機');
-//         } else if (report.sharpness < 70) {
-//             messages.push('⚠️ 請靠近或保持穩定');
-//         } else {
-//             messages.push('✓ 清晰度良好');
-//         }
-
-//         // 亮度提示
-//         if (report.brightness < 50) {
-//             messages.push('❌ 環境光線太暗 - 請移到亮處');
-//         } else if (report.brightness < 80) {
-//             messages.push('⚠️ 光線不足 - 建議在更亮的地方拍攝');
-//         } else if (report.brightness > 220) {
-//             messages.push('⚠️ 過度曝光 - 請避免強烈背光');
-//         } else {
-//             messages.push('✓ 亮度適中');
-//         }
-
-//         // 對比度提示
-//         if (report.contrast < 30) {
-//             messages.push('⚠️ 對比度低 - 請嘗試調整角度');
-//         } else {
-//             messages.push('✓ 對比度良好');
-//         }
-
-//         // 發票檢測提示
-//         if (report.invoiceRect) {
-//             messages.push('✓ 已檢測到發票');
-//         } else {
-//             messages.push('📋 請將發票對準鏡頭');
-//         }
-
-//         this.displayMessages(messages);
-//     }
-
-//     /**
-//      * 顯示訊息
-//      */
-//     displayMessages(messages) {
-//         const messageList = document.getElementById('message-list');
-        
-//         // 最多顯示 5 條訊息
-//         const displayMessages = messages.slice(0, this.MAX_MESSAGES);
-        
-//         messageList.innerHTML = displayMessages
-//             .map((msg, index) => {
-//                 let type = 'info';
-//                 if (msg.includes('✓')) type = 'success';
-//                 if (msg.includes('⚠️')) type = 'warning';
-//                 if (msg.includes('❌')) type = 'error';
-                
-//                 return `<div class="message ${type}">${msg}</div>`;
-//             })
-//             .join('');
-//     }
-
-//     /**
-//      * 繪製發票框線
-//      */
-//     drawInvoiceOverlay(rect) {
-//         if (!rect) {
-//             this.overlay.style.display = 'none';
-//             return;
-//         }
-
-//         this.overlay.style.display = 'block';
-//         this.overlay.style.width = rect.width + 'px';
-//         this.overlay.style.height = rect.height + 'px';
-//         this.overlay.style.left = rect.x + 'px';
-//         this.overlay.style.top = rect.y + 'px';
-//     }
-
-//     /**
-//      * 獲取當前幀的 Base64
-//      */
-//     getCurrentFrameBase64(quality = 0.9) {
-//         if (!this.video.videoWidth) {
-//             console.error('影像尚未準備好');
-//             return null;
-//         }
-
-//         this.canvas.width = this.video.videoWidth;
-//         this.canvas.height = this.video.videoHeight;
-//         const ctx = this.canvas.getContext('2d');
-//         ctx.drawImage(this.video, 0, 0);
-
-//         try {
-//             const dataUrl = this.canvas.toDataURL('image/jpeg', quality);
-//             return dataUrl.split(',')[1];
-//         } catch (error) {
-//             console.error('無法轉換為 Base64:', error);
-//             return null;
-//         }
-//     }
-
-//     /**
-//      * 處理拍照（含前置處理）
-//      */
-//     async processCapture() {
-//         const base64 = this.getCurrentFrameBase64();
-//         if (!base64) {
-//             showStatus('❌ 無法擷取影像', 'error');
-//             return null;
-//         }
-
-//         // 注：實際的影像標準化（EXIF、Resize 等）在後端進行
-//         // 前端只進行輕度增強（可選）
-        
-//         return {
-//             base64: base64,
-//             quality: imageProcessor.getQualityReport(),
-//             timestamp: new Date().toISOString()
-//         };
-//     }
-// }
+/* =========================
+   OCR Hook
+========================= */
+document.getElementById('ocrBtn').onclick = () => {
+    ocrCanvas.toBlob(blob => {
+        // TODO: POST blob to backend OCR service
+        console.log('OCR image ready:', blob);
+    }, 'image/png');
+};
