@@ -252,7 +252,6 @@ function sharpen(img, amount) {
 }
 
 // ================== Actions ==================
-
 function handleCancel(){
     location.reload();
 }
