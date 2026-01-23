@@ -1,5 +1,5 @@
-// ================== DOM ==================
-// ----- 左側: Camera -----
+// ==========| DOM |==========
+// ===== 左側: Camera =====
 // <!-- 即時相機 -->
 const video = document.getElementById("video");
 const overlay = document.getElementById("overlay");
@@ -18,9 +18,9 @@ document.getElementById("captureBtn").onclick = capturePhoto;
 // <!-- Zoom 數位 / 硬體變焦 -->
 const zoomSlider = document.getElementById("zoomSlider");
 
-// ----- 右側: Upload / Preview / Edit -----
+// ===== 右側: Upload / Preview / Edit =====
 
-// ===== panel =====
+// <div class="panel">
 // <!-- Upload -->
 const fileInput = document.getElementById("fileInput");
 fileInput.addEventListener("change", handleFileUpload);
@@ -49,12 +49,12 @@ uploadBtn.addEventListener("click", handleUpload);
 // <!-- Empty -->
 const previewEmpty = document.getElementById("previewEmpty");
 
-// ================== Context ==================
+// ---------- Context ----------
 const octx = overlay.getContext("2d");
 const cctx = captureCanvas.getContext("2d");
 const ectx = editCanvas.getContext("2d");
 
-// ================== State ==================
+// ---------- State ----------
 let stream = null;      // for startCamera / stopCamera
 let videoTrack = null;  // for startCamera / stopCamera
 let analyzing = false;
@@ -62,7 +62,7 @@ let zoomFactor = 1;
 let maxHardwareZoom = 1;
 let originalImage = null;
 
-// | Functions |
+// ==========| Functions |==========
 // ================== Camera ==================
 async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({
