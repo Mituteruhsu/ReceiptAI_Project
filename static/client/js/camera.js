@@ -61,12 +61,13 @@ class CameraController {
      * 啟動相機
      */
     async start() {
+        console.log('↓ start() ↓');
         if (this.stream) {
-            console.warn('Camera already running');
+            console.warn('start() Camera already running');
             return;
         }
 
-        console.log('[CameraController] start');
+        console.log('start() stream:', this.stream);
 
         try {
             // 🔑 確保之前的資源完全釋放
@@ -76,13 +77,15 @@ class CameraController {
             this.stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: { ideal: 'environment' },
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 }
-                }
+                    width: { ideal: 3000 },
+                    height: { ideal: 3000 }
+                },
+                audio: false
             });
-
+            console.log('start() stream:', this.stream);
             // 🔑 確保 video element 處於正確狀態
             this.video.srcObject = this.stream;
+            console.log('start() this.video.srcObject:', this.video.srcObject);
 
             // 🔑 等待 metadata 載入
             await new Promise((resolve, reject) => {
@@ -94,7 +97,9 @@ class CameraController {
             });
 
             await this.video.play(); // 🔑 確保真正啟動
+            console.log('start() video playing', !this.video.paused);
 
+            // 更新 UI 狀態
             this.video.classList.remove('d-none');
             this.cameraPlaceholder?.classList.add('d-none');
             this.startCameraBtn.classList.add('d-none');
@@ -114,29 +119,36 @@ class CameraController {
                     : '無法啟動相機，請檢查權限或改用檔案上傳'
             );
         }
+        console.log('↑ start() ↑');
     }
     
     /**
      * 停止相機
      */
     stop() {
-        console.log('[CameraController] stop');
+        console.log('↓ stop() ↓');
 
         // 1. 停止所有 tracks
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
         }
-
+        console.log('stop() this.stream before null:', this.stream);
+        
         // 2. 清掉 stream reference（非常重要）
         this.stream = null;
+        console.log('stop() this.stream after null:', this.stream);
 
         // 3. 重置 video element（Safari / Chrome 都需要）
         if (this.video) {
+            console.log('stop() Resetting video element', this.video);
+            // console.log('[CameraController] stop-Video element before reset:', this.video.srcObject);
             this.video.pause();
             this.video.srcObject = null;
             this.video.removeAttribute('src');
             this.video.load(); // 🔥 這行才是真正的 reset
             this.video.classList.add('d-none');
+            // console.log('[CameraController] stop-Video element reset done', this.video);
+            // console.log('[CameraController] stop-Video element after reset:', this.video.srcObject);
         }
 
         // 4. UI 回到初始狀態
@@ -145,15 +157,16 @@ class CameraController {
         this.captureBtn.classList.add('d-none');
         this.stopCameraBtn.classList.add('d-none');
 
-        console.log('🛑 相機已完全釋放（可重新啟動）');
+        console.log('相機已(可重新啟動)');
+        console.log('↑ stop() ↑');
     }
     
     /**
      * 拍照
      */
     async capture() {
-        console.log('[CameraController] capture triggered');
-        console.log('[CameraController] video size',
+        console.log('↓ capture() ↓');
+        console.log('capture() video size',
             this.video.videoWidth,
             this.video.videoHeight
         );
@@ -164,20 +177,23 @@ class CameraController {
         }
         
         try {
+            console.log('capture() this.stream:', this.stream);
             // 創建臨時畫布
             const canvas = document.createElement('canvas');
             canvas.width = this.video.videoWidth;
             canvas.height = this.video.videoHeight;
-            
+            console.log('capture() canvas:', canvas);
+
             const ctx = canvas.getContext('2d');
             ctx.drawImage(this.video, 0, 0);
-            
+            console.log('capture() canvas context:', ctx);
+
             // 轉為 Blob
             const blob = await new Promise(resolve => {
                 canvas.toBlob(resolve, 'image/jpeg', 0.95);
             });
             
-            console.log('📸 已拍照:', blob.size, 'bytes');
+            console.log('capture() blob:', blob, 'bytes');
             
             // 處理影像
             await this.processAndPreview(blob);
@@ -245,8 +261,9 @@ class CameraController {
      * 處理並預覽影像
      */
     async processAndPreview(imageSource) {
+        console.log('↓ processAndPreview() ↓');
         try {
-            console.log('[CameraController] processAndPreview', imageSource);
+            console.log('processAndPreview() input:', imageSource);
 
             // 使用 ImageProcessor 處理
             const result = await window.imageProcessor.processImage(imageSource);
@@ -300,14 +317,13 @@ class CameraController {
      * 清空預覽
      */
     clearPreview() {
-        console.log('[CameraController] clearPreview');
+        console.log('↓ clearPreview() ↓');
         
         // 🔑 安全檢查
         if (this.previewContainer) {
-            this.previewContainer.classList.remove('showing-image');
             this.previewContainer.innerHTML = `
                 <div class="d-flex align-items-center justify-content-center text-muted">
-                    <div class="text-center">
+                    <div class="text-center text-success">
                         <i class="bi bi-image fs-1 mb-2"></i>
                         <p class="mb-0">尚未拍攝或上傳影像</p>
                     </div>
@@ -318,6 +334,7 @@ class CameraController {
         if (this.processedCanvas) this.processedCanvas.classList.add('d-none');
         if (this.imageInfo) this.imageInfo.classList.add('d-none');
         if (this.processOptions) this.processOptions.classList.add('d-none');
+        console.log('↑ clearPreview() ↑');
     }
     
     /**
@@ -384,5 +401,5 @@ class CameraController {
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
     window.cameraController = new CameraController();
-    console.log('📷 CameraController 已初始化');
+    console.log('↓ 📷 [CameraController] 已初始化 ↓');
 });

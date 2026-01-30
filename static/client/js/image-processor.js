@@ -18,8 +18,8 @@ class ImageProcessor {
 
     /**
      * 載入影像並處理
-     * @param {Blob|File} imageSource - 影像來源
-     * @returns {Promise<Object>} - 處理結果
+    // param {Blob|File} imageSource - 影像來源
+    // returns {Promise<Object>} - 處理結果
      */
     async processImage(imageSource) {
         return new Promise((resolve, reject) => {
