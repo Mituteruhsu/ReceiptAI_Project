@@ -1,111 +1,94 @@
 # services/image_adapter.py
-
-from typing import Union
 from PIL import Image, ImageOps
 import numpy as np
 import base64
 import io
+from typing import Union
 
 
 class ImageAdapterError(Exception):
-    """Image Adapter 層級錯誤"""
+    """影像適配器錯誤"""
     pass
 
 
-def adapt_to_image(
-    source: Union[
-        Image.Image,
-        np.ndarray,
-        bytes,
-        str,          # base64 string
-    ]
-) -> Image.Image:
-    """
-    將各種來源的影像資料，統一轉為 PIL.Image.Image
-
-    支援：
-    - PIL.Image.Image
-    - numpy.ndarray (OpenCV / Camera frame)
-    - raw bytes
-    - base64 string (不含 data URI prefix)
-
-    不支援：
-    - path（檔案路徑應在更外層處理）
-    """
-
-    if source is None:
-        raise ImageAdapterError("Image source is None")
-
-    # =========================
-    # Case 1: Already PIL.Image
-    # =========================
-    if isinstance(source, Image.Image):
-        image = source
-
-    # =========================
-    # Case 2: numpy.ndarray
-    # =========================
-    elif isinstance(source, np.ndarray):
-        if source.size == 0:
-            raise ImageAdapterError("Empty numpy frame")
-
-        # 預設假設來自 OpenCV: BGR → RGB
-        if len(source.shape) == 3 and source.shape[2] == 3:
-            image = Image.fromarray(source[:, :, ::-1])
+class ImageAdapter:
+    """統一影像格式處理"""
+    
+    @staticmethod
+    def from_source(source: Union[Image.Image, np.ndarray, bytes, str]) -> Image.Image:
+        """
+        將各種來源轉為 PIL.Image
+        
+        Args:
+            source: PIL.Image | numpy.ndarray | bytes | base64 string
+            
+        Returns:
+            PIL.Image.Image (RGB mode)
+        """
+        if source is None:
+            raise ImageAdapterError("影像來源為空")
+        
+        # Case 1: 已經是 PIL.Image
+        if isinstance(source, Image.Image):
+            image = source
+        
+        # Case 2: numpy array (OpenCV)
+        elif isinstance(source, np.ndarray):
+            if source.size == 0:
+                raise ImageAdapterError("空的 numpy array")
+            # BGR → RGB
+            if len(source.shape) == 3 and source.shape[2] == 3:
+                image = Image.fromarray(source[:, :, ::-1])
+            else:
+                image = Image.fromarray(source)
+        
+        # Case 3: bytes
+        elif isinstance(source, bytes):
+            try:
+                image = Image.open(io.BytesIO(source))
+            except Exception as e:
+                raise ImageAdapterError(f"無效的影像 bytes: {e}")
+        
+        # Case 4: base64 string
+        elif isinstance(source, str):
+            try:
+                # 移除 data URI prefix
+                if ',' in source:
+                    source = source.split(',', 1)[1]
+                decoded = base64.b64decode(source)
+                image = Image.open(io.BytesIO(decoded))
+            except Exception as e:
+                raise ImageAdapterError(f"無效的 base64 字串: {e}")
+        
         else:
-            image = Image.fromarray(source)
-
-    # =========================
-    # Case 3: raw bytes
-    # =========================
-    elif isinstance(source, bytes):
+            raise ImageAdapterError(f"不支援的影像類型: {type(source)}")
+        
+        return ImageAdapter._normalize(image)
+    
+    @staticmethod
+    def _normalize(image: Image.Image) -> Image.Image:
+        """標準化影像"""
+        # 修正 EXIF 方向
         try:
-            image = Image.open(io.BytesIO(source))
-        except Exception as e:
-            raise ImageAdapterError("Invalid image bytes") from e
-
-    # =========================
-    # Case 4: base64 string
-    # =========================
-    elif isinstance(source, str):
-        try:
-            decoded = base64.b64decode(source)
-            image = Image.open(io.BytesIO(decoded))
-        except Exception as e:
-            raise ImageAdapterError("Invalid base64 image string") from e
-
-    else:
-        raise ImageAdapterError(f"Unsupported image source type: {type(source)}")
-
-    # =========================
-    # Normalize Image
-    # =========================
-    image = _normalize_image(image)
-
-    return image
+            image = ImageOps.exif_transpose(image)
+        except Exception:
+            pass
+        
+        # 轉為 RGB
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        # 驗證尺寸
+        if image.width <= 0 or image.height <= 0:
+            raise ImageAdapterError("無效的影像尺寸")
+        
+        return image
+    
+    @staticmethod
+    def to_bytes(image: Image.Image, format='JPEG', quality=95) -> bytes:
+        """轉為 bytes"""
+        buffer = io.BytesIO()
+        image.save(buffer, format=format, quality=quality)
+        return buffer.getvalue()
 
 
-def _normalize_image(image: Image.Image) -> Image.Image:
-    """
-    影像標準化：
-    - 套用 EXIF orientation
-    - 轉為 RGB
-    - 驗證尺寸
-    """
-
-    # 修正手機拍照方向
-    try:
-        image = ImageOps.exif_transpose(image)
-    except Exception:
-        pass
-
-    # 統一為 RGB
-    if image.mode != "RGB":
-        image = image.convert("RGB")
-
-    # 基本 sanity check
-    width, height = image.size
-    if width <= 0 or height <= 0:
-        raise ImageAdapterError("Invalid image size")
-
-    return image

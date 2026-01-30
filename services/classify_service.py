@@ -1,98 +1,65 @@
 # services/classify_service.py
+from typing import Dict, List
 from domain.enums import Category
-from domain.invoice import Invoice, Item
 
 
-# =========================
-# 分類關鍵字規則表
-# =========================
-
-CATEGORY_KEYWORDS = {
-    Category.FOOD: [
-        "蛋", "飯", "麵", "肉", "飲", "可樂", "咖啡", "茶"
-    ],
-    Category.HOUSHOLD_GOODS: [
-        "衛生紙", "清潔", "洗", "杯", "袋"
-    ],
-    Category.MEDICAL: [
-        "藥", "口罩", "酒精"
-    ],
-    Category.TRANSPORT: [
-        "油", "停車", "車"
-    ],
-}
-
-
-# =========================
-# 單品項分類-可以升級成AI分類
-# =========================
-
-def classify_item(item: Item) -> Category:
-    for category, keywords in CATEGORY_KEYWORDS.items():
-        for kw in keywords:
-            if kw in item.name:
-                return category
-    return Category.OTHER
-
-
-# =========================
-# 整張發票分類
-# =========================
-
-def classify_invoice(invoice: Invoice) -> dict:
-    """
-    回傳：
-    {
-        category: Category,
-        items: [(Item, Category)]
+class InvoiceClassifier:
+    """發票分類器"""
+    
+    # 分類關鍵字規則
+    KEYWORDS = {
+        Category.FOOD: ['蛋', '飯', '麵', '肉', '飲', '可樂', '咖啡', '茶', '餐', '食'],
+        Category.HOUSEHOLD_GOODS: ['衛生紙', '清潔', '洗', '杯', '袋', '紙巾'],
+        Category.MEDICAL: ['藥', '口罩', '酒精', '維他命'],
+        Category.TRANSPORT: ['油', '停車', '車', '加油', 'etag'],
+        Category.ENTERTAINMENT: ['電影', '門票', '遊樂'],
     }
-    """
-
-    result = []
-    category_count = {}
-
-    for item in invoice.items:
-        cat = classify_item(item)
-        result.append((item, cat))
-        category_count[cat] = category_count.get(cat, 0) + 1
-
-    # 以最多品項的分類為主分類
-    main_category = max(category_count, key=category_count.get) if category_count else Category.OTHER
-
-    return {
-        "main_category": main_category,
-        "items": result
-    }
-
-
-# =========================
-# 可執行測試（非語法糖）
-# =========================
-
-def test_classify_service():
-    items = [
-        Item(name="野川蛋黃派10粒", qty=1, price=65),
-        Item(name="可口可樂1250CC", qty=1, price=38),
-    ]
-
-    invoice = Invoice(
-        number="DF62269413",
-        date="2022-07-08",
-        total=103,
-        items=items,
-        invoice_type=None
-    )
-
-    result = classify_invoice(invoice)
-
-    print("=== Classification Result ===")
-    print("Main Category:", result["main_category"].value)
-    for item, cat in result["items"]:
-        print(f"- {item.name} → {cat.value}")
-
-
-if __name__ == "__main__":
-    test_classify_service()
-
-# 可執行測試指令
-# python -m services.classify_service
+    
+    @staticmethod
+    def classify(parsed_data: Dict) -> Dict:
+        """
+        分類發票及品項
+        
+        Args:
+            parsed_data: 解析後的發票資料
+            
+        Returns:
+            {
+                'main_category': 'food',
+                'items': [
+                    {'name': '...', 'qty': 1, 'price': 65, 'category': 'food'},
+                    ...
+                ]
+            }
+        """
+        items = parsed_data.get('items', [])
+        category_count = {}
+        classified_items = []
+        
+        # 分類每個品項
+        for item in items:
+            category = InvoiceClassifier._classify_item(item['name'])
+            item['category'] = category.value
+            classified_items.append(item)
+            
+            category_count[category] = category_count.get(category, 0) + 1
+        
+        # 主分類：品項數最多的分類
+        if category_count:
+            main_category = max(category_count, key=category_count.get)
+        else:
+            main_category = Category.OTHER
+        
+        return {
+            'main_category': main_category.value,
+            'items': classified_items
+        }
+    
+    @staticmethod
+    def _classify_item(item_name: str) -> Category:
+        """根據品名分類"""
+        for category, keywords in InvoiceClassifier.KEYWORDS.items():
+            for keyword in keywords:
+                if keyword in item_name:
+                    return category
+        return Category.OTHER

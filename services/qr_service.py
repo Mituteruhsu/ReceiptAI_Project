@@ -1,27 +1,30 @@
+# services/qr_service.py
 from pyzbar.pyzbar import decode
 from PIL import Image
+from typing import List, Dict
 
 
-def decode_qr(image_path: str) -> dict:
-    """
-    掃描圖片中所有 QR / Barcode
-    回傳已過濾的 QR 原始字串
-    """
-    image = Image.open(image_path)
-    decoded_objs = decode(image)
-
-    raw_qrs = []
-
-    for obj in decoded_objs:
-        try:
-            data = obj.data.decode("utf-8").strip()
-        except Exception:
-            continue
-
-        # 過濾太短或非可用資料
-        if len(data) < 8:
-            continue
-
-        raw_qrs.append(data)
-
-    return {"raw_qrs": raw_qrs}
+class QRService:
+    """QR Code 掃描服務"""
+    
+    @staticmethod
+    def decode(image: Image.Image) -> Dict[str, List[str]]:
+        """
+        掃描影像中的所有 QR Code
+        
+        Returns:
+            {'raw_qrs': ['qr_string_1', 'qr_string_2']}
+        """
+        decoded_objs = decode(image)
+        raw_qrs = []
+        
+        for obj in decoded_objs:
+            try:
+                data = obj.data.decode('utf-8').strip()
+                # 過濾太短的資料
+                if len(data) >= 8:
+                    raw_qrs.append(data)
+            except Exception:
+                continue
+        
+        return {'raw_qrs': raw_qrs}

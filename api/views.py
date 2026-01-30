@@ -1,73 +1,130 @@
-import base64
+# api/views.py
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from django.core.files.uploadedfile import InMemoryUploadedFile
+import json
+import logging
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
+from services.image_adapter import ImageAdapter, ImageAdapterError
+from services.qr_service import QRService
+from services.ocr_service import OCRService
+from services.invoice_parser import InvoiceParser
+from services.classify_service import InvoiceClassifier
 
-from api.serializers import InvoiceUploadSerializer
-from services.invoice_flow import process_invoice
-from services.image_adapter import adapt_to_image, ImageAdapterError
+logger = logging.getLogger(__name__)
 
-def process_invoice_internal(*, image_base64: str, meta: dict):
-    image_bytes = base64.b64decode(image_base64)
 
-    result = process_invoice(
-        image_bytes=image_bytes,
-        meta=meta
-    )
-
-    return {
-        "status": "ok",
-        "invoice": result
-    }
-
-class InvoiceUploadView(APIView):
+@csrf_exempt
+@require_http_methods(["POST"])
+def process_invoice(request):
+    print('api/views.py process_invoice')
     """
-    Client 統一入口：
-    - Web
-    - iOS
-    - Android
+    處理發票辨識流程
+    
+    接受:
+        - multipart/form-data: image (檔案上傳)
+        - application/json: image_base64 (base64 字串)
+    
+    回傳:
+        {
+            'success': true,
+            'data': {
+                'number': 'DF62269413',
+                'date': '2022-07-08',
+                'total': 103,
+                'items': [...],
+                'category': 'food',
+                'invoice_type': 'qr'
+            }
+        }
     """
-
-    def post(self, request):
-        serializer = InvoiceUploadSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-
-        try:
-            input_data = self._build_input(data)
-            result = process_invoice(input_data)
-        except ImageAdapterError as e:
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        return Response(result, status=status.HTTP_200_OK)
-
-    def _build_input(self, data):
-        """
-        將 Client payload 轉為 invoice_flow 可接受的 input
-        """
-        # Case 1: Client already decoded QR
-        if "raw_qrs" in data:
-            return {
-                "raw_qrs": data["raw_qrs"]
-            }
-
-        # Case 2: Client already OCR
-        if "raw_text" in data:
-            return {
-                "raw_text": data["raw_text"]
-            }
-
-        # Case 3: Image base64 → PIL.Image
-        if "image" in data:
-            return adapt_to_image(data["image"])
-
-        raise ValueError("無法建立有效的 invoice input")
+    try:
+        # 取得影像
+        image = None
+        
+        # Case 1: 檔案上傳
+        if request.FILES.get('image'):
+            print('api/views.py process_invoice - file upload detected')
+            file = request.FILES['image']
+            image = ImageAdapter.from_source(file.read())
+            print('api/views.py process_invoice - image loaded from file')
+            print(f'api/views.py process_invoice - image name: {image.name}, image size: {image.size}')
+        
+        # Case 2: Base64
+        elif request.content_type == 'application/json':
+            print('api/views.py process_invoice - JSON base64 detected')
+            data = json.loads(request.body)
+            image_base64 = data.get('image_base64')
+            print('api/views.py process_invoice - base64 image loaded')
+            print(f'api/views.py process_invoice - image_base64 length: {len(image_base64) if image_base64 else 0}')
+            if image_base64:
+                print('api/views.py process_invoice - converting base64 to image')
+                image = ImageAdapter.from_source(image_base64)
+        
+        if image is None:
+            return JsonResponse({
+                'success': False,
+                'error': '缺少影像資料'
+            }, status=400)
+        
+        # 步驟 1: 嘗試 QR Code
+        qr_result = QRService.decode(image)
+        raw_qrs = qr_result.get('raw_qrs', [])
+        
+        parsed_data = None
+        
+        if raw_qrs:
+            # 有 QR → 解析 QR
+            logger.info(f"檢測到 {len(raw_qrs)} 個 QR Code")
+            parsed_data = InvoiceParser.parse_qr(raw_qrs)
+        else:
+            # 無 QR → 使用 OCR
+            logger.info("未檢測到 QR Code，使用 OCR")
+            ocr_service = OCRService()
+            ocr_result = ocr_service.extract_text(image)
+            raw_text = ocr_result.get('raw_text', '')
+            
+            if not raw_text:
+                return JsonResponse({
+                    'success': False,
+                    'error': '無法辨識發票內容'
+                }, status=400)
+            
+            parsed_data = InvoiceParser.parse_ocr(raw_text)
+        
+        # 步驟 2: 分類
+        classified_result = InvoiceClassifier.classify(parsed_data)
+        
+        # 合併結果
+        result = {
+            **parsed_data,
+            'category': classified_result['main_category'],
+            'items': classified_result['items']
+        }
+        
+        return JsonResponse({
+            'success': True,
+            'data': result
+        })
+        
+    except ImageAdapterError as e:
+        logger.error(f"影像處理錯誤: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': f'影像處理失敗: {str(e)}'
+        }, status=400)
+        
+    except ValueError as e:
+        logger.error(f"解析錯誤: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': f'發票解析失敗: {str(e)}'
+        }, status=400)
+        
+    except Exception as e:
+        logger.exception("處理發票時發生未預期的錯誤")
+        return JsonResponse({
+            'success': False,
+            'error': '系統錯誤，請稍後再試'
+        }, status=500)

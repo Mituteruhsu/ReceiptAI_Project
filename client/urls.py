@@ -1,9 +1,11 @@
+# client/urls.py (新增 API 路由)
 from django.urls import path
-from .views import InvoiceUploadPage
-from .views import upload_invoice, uploadtest
+from . import views
+
+app_name = 'client'
 
 urlpatterns = [
-    path("upload/", InvoiceUploadPage.as_view(), name="invoice-upload-page"),
-    path("upload/", upload_invoice, name="client-upload"),
-    path("uploadtest/", uploadtest, name="uploadtest"),
+    path('', views.UploadView.as_view(), name='upload'),
+    path('confirm/', views.ConfirmView.as_view(), name='confirm'),
+    path('success/', views.SuccessView.as_view(), name='success'),
 ]

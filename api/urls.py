@@ -1,7 +1,7 @@
 from django.urls import path
 from . import views
-from api.views import InvoiceUploadView
 
+app_name = 'api'
 urlpatterns = [
-    path("invoice/upload/", InvoiceUploadView.as_view()),
+    path('process/', views.process_invoice, name='process'),
 ]

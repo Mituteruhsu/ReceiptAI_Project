@@ -1,41 +1,38 @@
-# tests/test_classify_service.py
-import unittest
+# service/test_classify_service.py
+from django.test import TestCase
+from services.classify_service import InvoiceClassifier
 
-from services.classify_service import classify_invoice
-from domain.invoice import Invoice, Item
-from domain.enums import Category
-
-
-class TestClassifier(unittest.TestCase):
-
+class InvoiceClassifierTestCase(TestCase):
+    
     def test_classify_food(self):
-        invoice = Invoice(
-            number="AA",
-            date="2026-01-13",
-            total=100,
-            items=[Item(name="餐點", qty=1, price=100)]
-        )
-        category = classify_invoice(invoice)
-        self.assertEqual(category, Category.FOOD)
-        print("Classified category:", category)
+        """測試飲食分類"""
+        data = {
+            'items': [
+                {'name': '可口可樂', 'qty': 1, 'price': 38},
+                {'name': '野川蛋黃派', 'qty': 1, 'price': 65},
+            ]
+        }
+        
+        result = InvoiceClassifier.classify(data)
+        
+        self.assertEqual(result['main_category'], '飲食')
+        self.assertEqual(result['items'][0]['category'], '飲食')
+    
+    def test_classify_transport(self):
+        """測試交通分類"""
+        data = {
+            'items': [
+                {'name': '停車費', 'qty': 1, 'price': 50},
+            ]
+        }
+        
+        result = InvoiceClassifier.classify(data)
+        
+        self.assertEqual(result['main_category'], '行(交通費/油錢)')
 
-    def test_classify_clothing(self):
-        invoice = Invoice(
-            number="BB",
-            date="2026-01-13",
-            total=200,
-            items=[Item(name="衣服", qty=2, price=100)]
-        )
-        category = classify_invoice(invoice)
-        self.assertEqual(category, Category.CLOTHING)
-        print("Classified category:", category)
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 # 單一測試檔案執行
-# python -m unittest services.test_classify_service
+# python -m unittest services.test_invoice_parser
 
 # 全域測試指令
 # -s service 是尋找專案指定"services"資料夾下

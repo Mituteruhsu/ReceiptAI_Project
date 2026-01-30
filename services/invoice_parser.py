@@ -1,123 +1,147 @@
 # services/invoice_parser.py
-from domain.invoice import Invoice, Item
-from domain.enums import InvoiceType
 from datetime import datetime
+from typing import Dict, List, Tuple
+import re
+from domain.enums import InvoiceType
 
-def parse_qr_set(raw_qrs: list[str]) -> Invoice:
-    """
-    將「一組 QRCode 原始字串」解析成一張 Invoice
-    台灣電子發票：
-    - QR1:Header(發票號碼、日期、金額…）
-    - QR2:Items(品項）
-    """
 
-    header_qr = None
-    item_qr = None
-
-    # 1. 判斷哪一個是 Header / Item
-    for qr in raw_qrs:
-        if qr.count(":") >= 10:
-            item_qr = qr
-        else:
-            header_qr = qr
-
-    if not header_qr:
-        raise ValueError("找不到發票 Header QR")
-
-    # 2️. 解析 Header QR
-    # 範例：DF622694131110708397000000003000000030000000008547587XKsayZY706hvyFpe6k3TQ==
-    invoice_number = header_qr[:10]
-    roc_date = header_qr[10:17]  # 民國年月日
-    total_amount = int(header_qr[29:37])
-
-    date = _roc_to_ad_date(roc_date)
-
-    items: list[Item] = []
-
-    # 3️. 解析 Item QR（如果存在）
-    if item_qr:
-        items = _parse_item_qr(item_qr)
-
-    return Invoice(
-        number=invoice_number,
-        date=date,
-        total=total_amount,
-        items=items,
-        invoice_type=InvoiceType.QR
-    )
-
-def _parse_item_qr(item_qr: str) -> list[Item]:
-    """
-    QR2 Item 格式：
-    :序號:數量:金額:品名:數量:金額:品名...
-    """
-    parts = item_qr.split(":")[5:]
-    items = []
-
-    for i in range(0, len(parts), 3):
-        try:
-            name = parts[i]
-            qty = int(parts[i + 1])
-            price = int(parts[i + 2])
-            items.append(Item(name=name, qty=qty, price=price))
-        except (IndexError, ValueError):
-            continue
-
-    return items
-
-def _roc_to_ad_date(roc: str) -> str:
-    """
-    民國日期轉西元
-    1110708 -> 2022-07-08
-    """
-    year = int(roc[:3]) + 1911
-    month = int(roc[3:5])
-    day = int(roc[5:7])
-    return f"{year:04d}-{month:02d}-{day:02d}"
-
-# =========================
-# 舊介面保留（單 QR 測試）
-# =========================
-def parse_qr(raw_qr: str) -> Invoice:
-    """
-    將 QRCode 原始字串解析成 Invoice
-    """
-    # TODO: 實作正則解析
-    return Invoice(number="AA12345678", date="2026-01-13", total=500, items=[], invoice_type=InvoiceType.QR)
-
-def parse_ocr(raw_text: str) -> Invoice:
-    """
-    將 OCR 字串解析成 Invoice
-    """
-    # TODO: 實作關鍵字 / 正則解析
-    return Invoice(number="BB87654321", date="2026-01-13", total=800, items=[], invoice_type=InvoiceType.PAPER)
-
-def test_parse():
-    invoice_qr = parse_qr("AA12345678|2026-01-13|500")
-    assert invoice_qr.number.startswith("AA")
-
-    invoice_ocr = parse_ocr("發票號碼: BB87654321 金額: 800")
-    assert invoice_ocr.total == 800
-
-# =========================
-# 可直接執行測試（非語法糖）
-# =========================
-
-def test_parse_qr_set():
-    raw_qrs = [
-        "DF622694131110708397000000003000000030000000008547587XKsayZY706hvyFpe6k3TQ==",
-        "**********:2:2:1:野川蛋黃派10粒:1:65:可口可樂1250CC:1:38"
-    ]
-
-    invoice = parse_qr_set(raw_qrs)
-
-    print("=== Invoice Parsed ===")
-    print("Number:", invoice.number)
-    print("Date:", invoice.date)
-    print("Total:", invoice.total)
-    print("Items:")
-    for item in invoice.items:
-        print("-", item.name, item.qty, item.price)
-
-if __name__ == "__main__":
-    test_parse_qr_set()
+class InvoiceParser:
+    """發票解析器"""
+    
+    @staticmethod
+    def parse_qr(qr_strings: List[str]) -> Dict:
+        """
+        解析台灣電子發票 QR Code
+        
+        Returns:
+            {
+                'number': 'DF62269413',
+                'date': '2022-07-08',
+                'total': 103,
+                'items': [{'name': '...', 'qty': 1, 'price': 65}],
+                'invoice_type': 'qr'
+            }
+        """
+        if not qr_strings:
+            raise ValueError("QR 資料為空")
+        
+        # 分離 Header 和 Items QR
+        header_qr = None
+        items_qr = None
+        
+        for qr in qr_strings:
+            if qr.count(':') >= 10:  # Items QR
+                items_qr = qr
+            else:  # Header QR
+                header_qr = qr
+        
+        if not header_qr:
+            raise ValueError("找不到發票 Header QR")
+        
+        # 解析 Header
+        invoice_number = header_qr[:10]
+        roc_date = header_qr[10:17]
+        total_amount = int(header_qr[29:37])
+        
+        date = InvoiceParser._roc_to_ad_date(roc_date)
+        
+        # 解析 Items
+        items = []
+        if items_qr:
+            items = InvoiceParser._parse_items_qr(items_qr)
+        
+        return {
+            'number': invoice_number,
+            'date': date,
+            'total': total_amount,
+            'items': items,
+            'invoice_type': InvoiceType.QR.value
+        }
+    
+    @staticmethod
+    def parse_ocr(text: str) -> Dict:
+        """
+        解析 OCR 文字
+        
+        Returns:
+            {
+                'number': 'BB87654321',
+                'date': '2022-07-08',
+                'total': 800,
+                'items': [],
+                'invoice_type': 'paper'
+            }
+        """
+        result = {
+            'number': '',
+            'date': '',
+            'total': 0,
+            'items': [],
+            'invoice_type': InvoiceType.PAPER.value
+        }
+        
+        # 提取發票號碼 (10 碼英數字)
+        number_match = re.search(r'[A-Z]{2}\d{8}', text)
+        if number_match:
+            result['number'] = number_match.group()
+        
+        # 提取日期
+        date_patterns = [
+            r'(\d{3})[年/\-](\d{1,2})[月/\-](\d{1,2})',  # 民國年
+            r'(\d{4})[年/\-](\d{1,2})[月/\-](\d{1,2})',  # 西元年
+        ]
+        for pattern in date_patterns:
+            date_match = re.search(pattern, text)
+            if date_match:
+                year, month, day = date_match.groups()
+                year = int(year)
+                if year < 1000:  # 民國年
+                    year += 1911
+                result['date'] = f"{year}-{int(month):02d}-{int(day):02d}"
+                break
+        
+        # 提取總金額
+        total_patterns = [
+            r'總計[：:]\s*\$?\s*(\d+)',
+            r'合計[：:]\s*\$?\s*(\d+)',
+            r'總額[：:]\s*\$?\s*(\d+)',
+        ]
+        for pattern in total_patterns:
+            total_match = re.search(pattern, text)
+            if total_match:
+                result['total'] = int(total_match.group(1))
+                break
+        
+        return result
+    
+    @staticmethod
+    def _roc_to_ad_date(roc: str) -> str:
+        """民國日期轉西元 1110708 → 2022-07-08"""
+        year = int(roc[:3]) + 1911
+        month = int(roc[3:5])
+        day = int(roc[5:7])
+        return f"{year:04d}-{month:02d}-{day:02d}"
+    
+    @staticmethod
+    def _parse_items_qr(items_qr: str) -> List[Dict]:
+        """
+        解析 Items QR
+        格式: :序號:數量:金額:品名:數量:金額:品名...
+        """
+        parts = items_qr.split(':')[5:]
+        items = []
+        
+        for i in range(0, len(parts), 3):
+            try:
+                name = parts[i]
+                qty = int(parts[i + 1])
+                price = int(parts[i + 2])
+                items.append({
+                    'name': name,
+                    'qty': qty,
+                    'price': price
+                })
+            except (IndexError, ValueError):
+                continue
+        
+        return items

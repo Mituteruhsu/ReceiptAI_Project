@@ -1,24 +1,48 @@
-# tests/test_invoice_parser.py
-import unittest
-from services.invoice_parser import parse_qr, parse_ocr
+# services/test_invoice_parser.py
+from django.test import TestCase
+from services.invoice_parser import InvoiceParser
 
-class TestInvoiceParser(unittest.TestCase):
-
-    def test_parse_qr(self):
-        invoice = parse_qr("AA12345678|2026-01-13|500")
-        self.assertEqual(invoice.number, "AA12345678")
-        self.assertEqual(invoice.total, 500)
-        print("Parsed QR Invoice:", invoice.__dict__)
-
+class InvoiceParserTestCase(TestCase):
+    
+    def test_parse_qr_header(self):
+        """測試解析 QR Header"""
+        qr_strings = [
+            "DF622694131110708397000000003000000030000000008547587XKsayZY706hvyFpe6k3TQ==",
+        ]
+        
+        result = InvoiceParser.parse_qr(qr_strings)
+        
+        self.assertEqual(result['number'], 'DF62269413')
+        self.assertEqual(result['date'], '2022-07-08')
+        self.assertEqual(result['total'], 30)
+    
+    def test_parse_qr_with_items(self):
+        """測試解析包含品項的 QR"""
+        qr_strings = [
+            "DF622694131110708397000000003000000030000000008547587XKsayZY706hvyFpe6k3TQ==",
+            "**********:2:2:1:野川蛋黃派10粒:1:65:可口可樂1250CC:1:38"
+        ]
+        
+        result = InvoiceParser.parse_qr(qr_strings)
+        
+        self.assertEqual(len(result['items']), 2)
+        self.assertEqual(result['items'][0]['name'], '野川蛋黃派10粒')
+        self.assertEqual(result['items'][0]['qty'], 1)
+        self.assertEqual(result['items'][0]['price'], 65)
+    
     def test_parse_ocr(self):
-        raw_text = "發票號碼: BB87654321 金額: 800"
-        invoice = parse_ocr(raw_text)
-        self.assertEqual(invoice.number, "BB87654321")
-        self.assertEqual(invoice.total, 800)
-        print("Parsed OCR Invoice:", invoice.__dict__)
-
-if __name__ == "__main__":
-    unittest.main()
+        """測試 OCR 解析"""
+        text = """
+        發票號碼: BB87654321
+        日期: 111年7月8日
+        總計: 800元
+        """
+        
+        result = InvoiceParser.parse_ocr(text)
+        
+        self.assertEqual(result['number'], 'BB87654321')
+        self.assertIn('2022', result['date'])
+        self.assertEqual(result['total'], 800)
 
 # 單一測試檔案執行
 # python -m unittest services.test_invoice_parser

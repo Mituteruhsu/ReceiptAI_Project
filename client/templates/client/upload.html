@@ -1,106 +1,145 @@
+<!-- client/templates/client/upload.html -->
+{% extends 'client/base.html' %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <title>Receipt AI - Camera & Edit</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- Bootstrap 5 -->
-    <link
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
-        rel="stylesheet"
-    />
-    <link rel="stylesheet" href="{% static 'client/css/style.css' %}">
-</head>
-<body>
-    <div class="m-4">
-        <h4 class="text-center mb-3">發票拍攝與修圖</h4>
-        <div class="row g-3">
+{% block title %}上傳發票{% endblock %}
 
-            <!-- ================= 左側：Camera ================= -->
-            <div class="col-12 col-md-6">
-
-                <!-- 即時相機 -->
-                <div class="position-relative">
-                    <video id="video" autoplay muted playsinline></video>
-                    <canvas id="overlay"></canvas>
-                    <canvas id="captureCanvas" class="d-none"></canvas>
-                </div>
-
-                <!-- 拍攝品質 -->
-                <div class="panel mt-2">
-                    <div class="metric">清晰度 <span id="sharpnessMetric">--</span></div>
-                    <div class="metric">亮度 <span id="brightnessMetric">--</span></div>
-                    <div class="metric">對比度 <span id="contrastMetric">--</span></div>
-                    <div id="hint" class="mt-2 text-secondary">請將發票完整置於畫面中</div>
-                </div>
-
-                <!-- Camera Controls -->
-                <div class="d-flex gap-2 mt-2">
-                    <button id="startBtn" class="btn btn-primary w-100">開啟</button>
-                    <button id="captureBtn" class="btn btn-secondary w-100">拍照</button>
-                    <button id="stopBtn" class="btn btn-dark w-100">關閉</button>
-                </div>
-
-                <!-- Zoom -->
-                <div class="mt-2">
-                    <label class="form-label mb-1">數位 / 硬體變焦</label>
-                    <input type="range" id="zoomSlider" class="form-range" min="1" max="3" step="0.1" value="1">
-                </div>
-
-            </div>
-
-            <!-- ================= 右側：Upload / Preview / Edit ================= -->
-            <div class="col-12 col-md-6">
-
-                <div class="panel">
-
-                    <!-- Upload -->
-                    <label class="btn btn-outline-light w-100 mb-2">
-                        上傳圖片
-                        <input id="fileInput" type="file" accept="image/*" capture hidden>
-                    </label>
-
-                    <!-- Preview Image -->
-                    <img id="previewImage" class="d-none mb-2" alt="preview">
-
-                    <!-- Edit Canvas -->
-                    <canvas id="editCanvas" class="d-none mb-2"></canvas>
-
-                    <!-- Edit Sliders -->
-                    <div id="editControls" class="d-none">
-                        <div class="mt-2">
-                            <label>亮度</label>
-                            <input type="range" id="brightness" min="-50" max="50" value="0" class="form-range">
-                        </div>
-                        <div class="mt-2">
-                            <label>對比</label>
-                            <input type="range" id="contrast" min="-50" max="50" value="0" class="form-range">
-                        </div>
-                        <div class="mt-2">
-                            <label>銳利化</label>
-                            <input type="range" id="sharpness" min="0" max="5" step="0.1" value="0" class="form-range">
+{% block content %}
+<div class="row g-4">
+    <!-- 左側：相機控制 -->
+    <div class="col-lg-6">
+        <div class="d-flex align-items-center mb-3">
+            <h4 class="mb-0">📸 拍攝發票</h4>
+        </div>
+        
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <!-- 相機預覽區 -->
+                <div class="ratio ratio-4x3 bg-dark rounded mb-3 position-relative overflow-hidden">
+                    <video id="video" autoplay playsinline class="d-none position-absolute top-0 start-0 w-100 h-100"></video>
+                    <div id="cameraPlaceholder" class="d-flex align-items-center justify-content-center text-muted">
+                        <div class="text-center text-success">
+                            <i class="bi bi-camera fs-1 mb-2"></i>
+                            <p class="mb-0">點擊下方按鈕開啟相機</p>
                         </div>
                     </div>
-
-                    <!-- Actions -->
-                    <div id="previewActions" class="d-none mt-3">
-                        <button id="uploadBtn" class="btn btn-success w-100 mb-2">確認上傳</button>
-                        <button id="cancelBtn" class="btn btn-outline-light w-100">取消</button>
-                    </div>
-
-                    <!-- Empty -->
-                    <div id="previewEmpty" class="text-center text-secondary mt-3">尚未拍照或上傳圖片</div>
-
+                </div>
+                
+                <!-- 控制按鈕 -->
+                <div class="d-grid gap-2">
+                    <button id="startCamera" class="btn btn-primary">
+                        <i class="bi bi-camera"></i> 開啟相機
+                    </button>
+                    <button id="capture" class="btn btn-success d-none">
+                        <i class="bi bi-camera-fill"></i> 拍照
+                    </button>
+                    <button id="stopCamera" class="btn btn-secondary d-none">
+                        <i class="bi bi-x-circle"></i> 關閉相機
+                    </button>
+                </div>
+                
+                <!-- 或分隔線 -->
+                <div class="text-center my-3">
+                    <span class="badge bg-secondary">或</span>
+                </div>
+                
+                <!-- 檔案上傳 -->
+                <div class="mb-0">
+                    <label for="fileInput" class="form-label">選擇發票圖片</label>
+                    <input type="file" class="form-control" id="fileInput" accept="image/*">
                 </div>
             </div>
-
+        </div>
+        
+        <!-- 使用說明 -->
+        <div class="alert alert-info mt-3" role="alert">
+            <h6 class="alert-heading">💡 使用說明</h6>
+            <ul class="mb-0 small">
+                <li>拍攝時請確保發票完整在畫面中</li>
+                <li>光線充足，避免反光</li>
+                <li>系統會自動調整對比度和清晰度</li>
+                <li>支援 QR Code 和 OCR 辨識</li>
+            </ul>
         </div>
     </div>
+    
+    <!-- 右側：預覽與處理 -->
+    <div class="col-lg-6">
+        <div class="d-flex align-items-center mb-3">
+            <h4 class="mb-0">🔍 影像預覽</h4>
+        </div>
+        
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <!-- 預覽區 -->
+                <div id="previewContainer" class="ratio ratio-4x3 bg-light rounded border border-2 border-dashed mb-3">
+                    <div class="d-flex align-items-center justify-content-center text-muted">
+                        <div class="text-center text-success">
+                            <i class="bi bi-image fs-1 mb-2"></i>
+                            <p class="mb-0">尚未拍攝或上傳影像</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 原始影像（隱藏） -->
+                <canvas id="originalCanvas" class="d-none"></canvas>
+                
+                <!-- 處理後影像 -->
+                <canvas id="processedCanvas" class="d-none w-100 rounded shadow-sm"></canvas>
+                
+                <!-- 影像資訊 -->
+                <div id="imageInfo" class="d-none">
+                    <div class="card bg-dark text-white mb-3">
+                        <div class="card-body p-3">
+                            <div class="row g-2 small">
+                                <div class="col-4">
+                                    <div class="text-muted">尺寸</div>
+                                    <div id="imageDimensions" class="fw-bold">-</div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="text-muted">亮度</div>
+                                    <div id="imageBrightness" class="fw-bold">-</div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="text-muted">清晰度</div>
+                                    <div id="imageSharpness" class="fw-bold">-</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 處理選項 -->
+                <div id="processOptions" class="d-none">
+                    <h6 class="fw-bold mb-3 text-white">影像增強選項</h6>
+                    
+                    <div class="form-check mb-2 text-white">
+                        <input class="form-check-input" type="checkbox" id="autoContrast" checked>
+                        <label class="form-check-label" for="autoContrast">
+                            自動對比增強
+                        </label>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button id="reprocess" class="btn btn-outline-primary">
+                            <i class="bi bi-arrow-clockwise"></i> 重新處理
+                        </button>
+                        <button id="confirmUpload" class="btn btn-success btn-lg">
+                            <i class="bi bi-check-circle"></i> 確認送出
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-    <!-- JS 之後再接 -->
-    <script src="{% static 'client/js/ios.js' %}"></script>
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+{% endblock %}
 
-</body>
-</html>
+{% block extra_js %}
+<script src="{% static 'client/js/image-processor.js' %}"></script>
+<script src="{% static 'client/js/camera.js' %}"></script>
+{% endblock %}

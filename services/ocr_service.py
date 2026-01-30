@@ -1,17 +1,28 @@
 # services/ocr_service.py
 import easyocr
+from PIL import Image
+import numpy as np
+from typing import Dict
 
-# 建立 reader，只初始化一次
-reader = easyocr.Reader(['ch_tra'], gpu=False)  # gpu=True 可加速，但需 GPU
 
-def extract_text(image_path: str) -> str:
-    """
-    輸入: 發票圖片
-    輸出: OCR 完整文字
-    """
-    result = reader.readtext(image_path, detail=0)
-    return "\n".join(result)
-
-def test_ocr_service():
-    text = extract_text("recive20220708.jpg")
-    assert len(text) > 0
+class OCRService:
+    """OCR 文字辨識服務"""
+    
+    def __init__(self):
+        self.reader = easyocr.Reader(['ch_tra'], gpu=False)
+    
+    def extract_text(self, image: Image.Image) -> Dict[str, str]:
+        """
+        提取影像中的文字
+        
+        Returns:
+            {'raw_text': 'extracted text'}
+        """
+        # 轉為 numpy array
+        img_array = np.array(image)
+        
+        # OCR 辨識
+        result = self.reader.readtext(img_array, detail=0)
+        raw_text = '\n'.join(result)
+        
+        return {'raw_text': raw_text}
