@@ -191,7 +191,7 @@ class ImageProcessor {
      * 將畫布轉為 Blob
      */
     async canvasToBlob(canvas, quality = 0.95) {
-        console.log('[ImageProcessor] canvasToBlob');
+        console.log('↓ canvasToBlob() ↓');
         return new Promise((resolve) => {
             canvas.toBlob((blob) => {
                 resolve(blob);

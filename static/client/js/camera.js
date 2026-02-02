@@ -267,11 +267,12 @@ class CameraController {
 
             // 使用 ImageProcessor 處理
             const result = await window.imageProcessor.processImage(imageSource);
-            console.log('[CameraController] processed result', result);
+            console.log('processImage() result:', result);
 
             // 儲存處理後的 Blob
             this.currentBlob = await window.imageProcessor.canvasToBlob(result.canvas);
-            
+            console.log('canvasToBlob() result:', this.currentBlob);
+
             // 更新預覽
             this.updatePreview(result);
             
@@ -287,7 +288,8 @@ class CameraController {
      * 更新預覽區域
      */
     updatePreview(result) {
-        console.log('[CameraController] updatePreview', result);
+        console.log('↓ updatePreview() ↓');
+        console.log('updatePreview(result):', result);
         
         console.log('🔍 Element status:', {
                 previewContainer: this.previewContainer ? '✓ 存在' : '✗ 不存在',
@@ -311,6 +313,7 @@ class CameraController {
         
         this.imageInfo.classList.remove('d-none');
         this.processOptions.classList.remove('d-none');
+        console.log('↑ updatePreview() ↑');
     }
     
     /**
@@ -341,17 +344,16 @@ class CameraController {
      * 上傳影像到後端
      */
     async uploadImage() {
+        console.log('↓ uploadImage() ↓');
         if (!this.currentBlob) {
             alert('請先拍照或上傳影像');
             return;
         }
 
-        console.log('[Upload] preparing FormData');
+        console.log('forming FormData for upload');
         const formData = new FormData();
         formData.append('image', this.currentBlob, 'invoice.jpg');
-        console.log('[Upload] blob size', this.currentBlob.size);
-
-        this.showLoader('正在辨識發票...', '使用 QR Code / OCR 辨識中');
+        console.log('FormData prepared:', formData);
         
         try {
             const response = await fetch('/api/process/', {
@@ -384,6 +386,7 @@ class CameraController {
             alert('辨識失敗: ' + error.message);
             this.hideLoader();
         }
+        console.log('↑ uploadImage() ↑');
     }
         
     /**
