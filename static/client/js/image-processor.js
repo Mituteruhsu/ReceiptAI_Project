@@ -22,21 +22,29 @@ class ImageProcessor {
     // returns {Promise<Object>} - 處理結果
      */
     async processImage(imageSource) {
+        console.log('↓ processImage() ↓');
         return new Promise((resolve, reject) => {
             const img = new Image();
             const url = URL.createObjectURL(imageSource);
 
             img.onload = () => {
+                console.log('processImage() img.onload 觸發');
                 URL.revokeObjectURL(url);
+                console.log('URL.revokeObjectURL(url) 釋放資源');
+                console.log('img.width:', img.width, 'img.height:', img.height);
                 
                 // 儲存原始影像
                 this.originalCanvas.width = img.width;
                 this.originalCanvas.height = img.height;
                 this.originalCtx.drawImage(img, 0, 0);
+                console.log('this.originalCanvas.width:', this.originalCanvas.width, 'this.originalCanvas.height:', this.originalCanvas.height);
+                console.log('原始影像已繪製至 originalCanvas', img);
 
                 // 處理影像
                 const result = this.applyProcessing(img);
                 resolve(result);
+                console.log('processImage() 處理完成，結果:', result);
+                console.log('↑ processImage() ↑');
             };
 
             img.onerror = () => {
@@ -45,46 +53,51 @@ class ImageProcessor {
             };
 
             img.src = url;
-        });
+            console.log('↑ processImage() ↑');
+        });        
     }
 
     /**
      * 應用 OCR-Friendly 處理
      */
     applyProcessing(img) {
+        console.log('↓ applyProcessing() ↓');
         const width = img.width;
         const height = img.height;
+        console.log('From processImage() 原始影像大小', width, height);
 
         // 設定處理後畫布
         this.processedCanvas.width = width;
         this.processedCanvas.height = height;
+        console.log('this.processedCanvas.width:', this.processedCanvas.width, 'this.processedCanvas.height:', this.processedCanvas.height);
         this.processedCtx.drawImage(img, 0, 0);
+        console.log('影像已繪製至 processedCanvas', img);
 
         // 取得影像資料
         let imageData = this.processedCtx.getImageData(0, 0, width, height);
-        
-        
+        console.log('取得 imageData', imageData);
+                
         // // 取得處理選項
         // const options = this.getProcessingOptions();
 
         // --- 新增：灰階化 (黑白化) ---
-        console.log('[ImageProcessor] grayscale');
         imageData = this.grayscale(imageData);
+        console.log('灰階化後的 imageData', imageData);
 
         // --- Normalize ---
-        console.log('[ImageProcessor] normalize');
         imageData = this.normalize(imageData);
+        console.log('正規化後的 imageData', imageData);
 
         // 寫回畫布
         this.processedCtx.putImageData(imageData, 0, 0);
+        console.log('處理後的 imageData 已寫回 processedCanvas', this.processedCanvas);
 
         // 計算影像品質指標
         const metrics = this.calculateMetrics(imageData);
-        console.log('[ImageProcessor] applyProcessing done', metrics);
-        console.log('[ImageProcessor] width', width);
-        console.log('[ImageProcessor] height', height);
-        console.log('[ImageProcessor] processedCanvas', this.processedCanvas);
+        console.log('計算後的影像品質指標 metrics', metrics);
 
+        console.log('處理完成的影像大小', width, height);
+        console.log('↑ applyProcessing() ↑');
         return {
             width,
             height,
@@ -95,6 +108,8 @@ class ImageProcessor {
 
     // 灰階化函數
     grayscale(imageData) {
+        console.log('↓ grayscale() ↓');
+        console.log('before grayscale(imageData):', imageData);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
             // 使用加權平均值轉換為灰階
@@ -103,11 +118,16 @@ class ImageProcessor {
             data[i + 1] = avg; // G
             data[i + 2] = avg; // B
         }
+        console.log('after grayscale(imageData):', imageData);
+        console.log('↑ grayscale() ↑');
         return imageData;
     }
 
     // 正規化函數
     normalize(imageData) {
+        console.log('↓ normalize() ↓');
+        console.log('before normalize(imageData):', imageData);
+        
         const data = imageData.data;
         let sum = 0, sq = 0, n = data.length / 4;
 
@@ -125,6 +145,8 @@ class ImageProcessor {
             data[i] = data[i+1] = data[i+2] = v;
         }
 
+        console.log('after normalize(imageData):', imageData);
+        console.log('↑ normalize() ↑');
         return imageData;
     }
 
@@ -133,6 +155,9 @@ class ImageProcessor {
      * 計算影像品質指標
      */
     calculateMetrics(imageData) {
+        console.log('↓ calculateMetrics() ↓');
+        console.log('imageData for metrics calculation:', imageData);
+
         const data = imageData.data;
         let totalBrightness = 0;
         let edges = 0;
@@ -154,7 +179,8 @@ class ImageProcessor {
         }
 
         const sharpness = edges / (data.length / 4);
-
+        console.log('avgBrightness:', avgBrightness, 'sharpness:', sharpness);
+        console.log('↑ calculateMetrics() ↑');
         return {
             brightness: Math.round(avgBrightness),
             sharpness: Math.round(sharpness)
