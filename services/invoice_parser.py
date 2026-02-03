@@ -40,7 +40,7 @@ class InvoiceParser:
         if not header_qr:
             raise ValueError("找不到發票 Header QR")
         
-        # 解析 Header
+        # 解析 items_qr 內容
         invoice_number = items_qr[:10]
         roc_date = items_qr[10:17]
         total_amount = int(items_qr[29:37])
