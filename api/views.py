@@ -49,7 +49,7 @@ def process_invoice(request):
             file = request.FILES['image']
             image = ImageAdapter.from_source(file.read())
             print('api/views.py process_invoice - image loaded from file')
-            print(f'api/views.py process_invoice - image name: {image.name}, image size: {image.size}')
+            print(f'api/views.py process_invoice - image name: {image}, image size: {image.size}')
         
         # Case 2: Base64
         elif request.content_type == 'application/json':
@@ -70,17 +70,21 @@ def process_invoice(request):
         
         # 步驟 1: 嘗試 QR Code
         qr_result = QRService.decode(image)
+        # print(f'QR Code result: {qr_result}')
         raw_qrs = qr_result.get('raw_qrs', [])
+        # print(f'Raw QR codes: {raw_qrs}')
         
         parsed_data = None
         
         if raw_qrs:
             # 有 QR → 解析 QR
             logger.info(f"檢測到 {len(raw_qrs)} 個 QR Code")
+            print(f"檢測到 {len(raw_qrs)} 個 QR Code")
             parsed_data = InvoiceParser.parse_qr(raw_qrs)
         else:
             # 無 QR → 使用 OCR
             logger.info("未檢測到 QR Code，使用 OCR")
+            print("未檢測到 QR Code，使用 OCR")
             ocr_service = OCRService()
             ocr_result = ocr_service.extract_text(image)
             raw_text = ocr_result.get('raw_text', '')

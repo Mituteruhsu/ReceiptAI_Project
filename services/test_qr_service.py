@@ -27,11 +27,11 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 
-from services.qr_service import decode_qr
+from services.qr_service import decode
 
 
 if __name__ == "__main__":
-    result = decode_qr("recive20220708.jpg")
+    result = decode("recive20220708.jpg")
 
     print("=== QR Scan Result ===")
     for idx, qr in enumerate(result["raw_qrs"], start=1):

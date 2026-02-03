@@ -31,14 +31,14 @@ class ImageProcessor {
                 console.log('processImage() img.onload 觸發');
                 URL.revokeObjectURL(url);
                 console.log('URL.revokeObjectURL(url) 釋放資源');
-                console.log('img.width:', img.width, 'img.height:', img.height);
+                // console.log('img.width:', img.width, 'img.height:', img.height);
                 
                 // 儲存原始影像
                 this.originalCanvas.width = img.width;
                 this.originalCanvas.height = img.height;
                 this.originalCtx.drawImage(img, 0, 0);
-                console.log('this.originalCanvas.width:', this.originalCanvas.width, 'this.originalCanvas.height:', this.originalCanvas.height);
-                console.log('原始影像已繪製至 originalCanvas', img);
+                // console.log('this.originalCanvas.width:', this.originalCanvas.width, 'this.originalCanvas.height:', this.originalCanvas.height);
+                // console.log('原始影像已繪製至 originalCanvas', img);
 
                 // 處理影像
                 const result = this.applyProcessing(img);
@@ -88,9 +88,17 @@ class ImageProcessor {
         imageData = this.normalize(imageData);
         console.log('正規化後的 imageData', imageData);
 
-        // 寫回畫布
-        this.processedCtx.putImageData(imageData, 0, 0);
-        console.log('處理後的 imageData 已寫回 processedCanvas', this.processedCanvas);
+        // --- adaptiveThreshold (自適應二值化) ---
+        imageData = this.adaptiveThreshold(imageData, 21, 7);
+        console.log('自適應二值化後的 imageData', imageData);
+
+        // // --- 可選擇性加入 Morphology 處理 ---
+        // imageData = this.morphClose(imageData);
+        // console.log('Morphology 處理後的 imageData', imageData);
+
+        // // 寫回畫布
+        // this.processedCtx.putImageData(imageData, 0, 0);
+        // console.log('處理後的 imageData 已寫回 processedCanvas', this.processedCanvas);
 
         // 計算影像品質指標
         const metrics = this.calculateMetrics(imageData);
@@ -150,6 +158,130 @@ class ImageProcessor {
         return imageData;
     }
 
+    // 自適應二值化函數
+    adaptiveThreshold(imageData, blockSize = 21, C = 7) {
+        console.log('↓ adaptiveThreshold() ↓');
+        console.log('before adaptiveThreshold(imageData):', imageData);
+        const { width, height, data } = imageData;
+        const output = new Uint8ClampedArray(data.length);
+        const half = Math.floor(blockSize / 2);
+
+        // 積分影像（Integral Image）
+        const integral = new Uint32Array(width * height);
+
+        for (let y = 0; y < height; y++) {
+            let rowSum = 0;
+            for (let x = 0; x < width; x++) {
+                const idx = (y * width + x) * 4;
+                const gray = data[idx]; // R channel
+                rowSum += gray;
+                const above = y > 0 ? integral[(y - 1) * width + x] : 0;
+                integral[y * width + x] = rowSum + above;
+            }
+        }
+
+        // threshold
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const x1 = Math.max(x - half, 0);
+                const y1 = Math.max(y - half, 0);
+                const x2 = Math.min(x + half, width - 1);
+                const y2 = Math.min(y + half, height - 1);
+
+                const area = (x2 - x1 + 1) * (y2 - y1 + 1);
+
+                const A = integral[y2 * width + x2];
+                const B = y1 > 0 ? integral[(y1 - 1) * width + x2] : 0;
+                const C_ = x1 > 0 ? integral[y2 * width + (x1 - 1)] : 0;
+                const D = (x1 > 0 && y1 > 0) ? integral[(y1 - 1) * width + (x1 - 1)] : 0;
+
+                const mean = (A - B - C_ + D) / area;
+                const idx = (y * width + x) * 4;
+                const val = data[idx] < (mean - C) ? 0 : 255;
+
+                output[idx] = output[idx + 1] = output[idx + 2] = val;
+                output[idx + 3] = 255;
+            }
+        }
+
+        imageData.data.set(output);
+        console.log('↑ adaptiveThreshold() ↑');
+        return imageData;
+    }
+
+    // Morphology 函數（可選擇性加入）
+    morphClose(imageData) {
+        console.log('↓ morphClose() ↓');
+        imageData = this.dilate(imageData, 3);
+        imageData = this.erode(imageData, 3);
+        console.log('↑ morphClose() ↑');
+        return imageData;
+    }
+
+    // 膨脹(Dilation) 和 腐蝕(Erosion) 可根據需要實現
+    dilate(imageData, kernelSize = 3) {
+        console.log('↓ dilate() ↓');
+        const { width, height, data } = imageData;
+        const output = new Uint8ClampedArray(data.length);
+        const half = Math.floor(kernelSize / 2);
+
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                let max = 0;
+
+                for (let ky = -half; ky <= half; ky++) {
+                    for (let kx = -half; kx <= half; kx++) {
+                        const ny = y + ky;
+                        const nx = x + kx;
+                        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+                        const idx = (ny * width + nx) * 4;
+                        max = Math.max(max, data[idx]);
+                    }
+                }
+
+                const i = (y * width + x) * 4;
+                output[i] = output[i + 1] = output[i + 2] = max;
+                output[i + 3] = 255;
+            }
+        }
+
+        imageData.data.set(output);
+        console.log('↑ dilate() ↑');
+        return imageData;
+    }
+
+    // 腐蝕函數
+    erode(imageData, kernelSize = 3) {
+        console.log('↓ erode() ↓');
+        const { width, height, data } = imageData;
+        const output = new Uint8ClampedArray(data.length);
+        const half = Math.floor(kernelSize / 2);
+
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                let min = 255;
+
+                for (let ky = -half; ky <= half; ky++) {
+                    for (let kx = -half; kx <= half; kx++) {
+                        const ny = y + ky;
+                        const nx = x + kx;
+                        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+                        const idx = (ny * width + nx) * 4;
+                        min = Math.min(min, data[idx]);
+                    }
+                }
+
+                const i = (y * width + x) * 4;
+                output[i] = output[i + 1] = output[i + 2] = min;
+                output[i + 3] = 255;
+            }
+        }
+
+        imageData.data.set(output);
+        console.log('↑ erode() ↑');
+        return imageData;
+    }
+
 
     /**
      * 計算影像品質指標
@@ -190,7 +322,7 @@ class ImageProcessor {
     /**
      * 將畫布轉為 Blob
      */
-    async canvasToBlob(canvas, quality = 0.95) {
+    async canvasToBlob(canvas, quality = 1) {
         console.log('↓ canvasToBlob() ↓');
         return new Promise((resolve) => {
             canvas.toBlob((blob) => {
@@ -203,6 +335,7 @@ class ImageProcessor {
      * 重新處理（當使用者調整選項後）
      */
     async reprocess() {
+        console.trace('↓ reprocess() ↓');
         // 從原始畫布重新處理
         const img = new Image();
         img.onload = () => {
@@ -210,15 +343,12 @@ class ImageProcessor {
             window.cameraController.updatePreview(result);
         };
         img.src = this.originalCanvas.toDataURL();
+        console.log('↑ reprocess() ↑');
     }
 }
 
 // 全域初始化
 document.addEventListener('DOMContentLoaded', () => {
     window.imageProcessor = new ImageProcessor();
-    
-    // 重新處理按鈕
-    document.getElementById('reprocess')?.addEventListener('click', () => {
-        window.imageProcessor.reprocess();
-    });
+    console.log('↓ 🖼️ [ImageProcessor] 初始化 ↓');
 });

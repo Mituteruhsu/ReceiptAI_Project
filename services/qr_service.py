@@ -15,6 +15,7 @@ class QRService:
         Returns:
             {'raw_qrs': ['qr_string_1', 'qr_string_2']}
         """
+        print("↓ QRService.decode() ↓")
         decoded_objs = decode(image)
         raw_qrs = []
         
@@ -26,5 +27,7 @@ class QRService:
                     raw_qrs.append(data)
             except Exception:
                 continue
-        
+
+        print(f"QRService.decode() raw_qrs: {raw_qrs}")
+        print("↑ QRService.decode() ↑")
         return {'raw_qrs': raw_qrs}

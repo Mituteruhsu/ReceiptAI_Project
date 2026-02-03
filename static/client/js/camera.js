@@ -55,6 +55,9 @@ class CameraController {
         
         // 處理選項
         this.confirmUploadBtn?.addEventListener('click', () => this.uploadImage());
+        
+        // 重新整理
+        this.reprocessBtn?.addEventListener('click', async () => await window.imageProcessor.reprocess());
     }
     
     /**
@@ -72,8 +75,10 @@ class CameraController {
         try {
             // 🔑 確保之前的資源完全釋放
             await this.ensureCleanState();
+            console.log('↑ ensureCleanState() ↑');
             await new Promise(r => setTimeout(r, 200)); // 🔑 給瀏覽器釋放時間
-
+            
+            console.log('Requesting camera access...');
             this.stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: { ideal: 'environment' },
@@ -157,7 +162,7 @@ class CameraController {
         this.captureBtn.classList.add('d-none');
         this.stopCameraBtn.classList.add('d-none');
 
-        console.log('相機已(可重新啟動)');
+        console.log('相機(可重新啟動)');
         console.log('↑ stop() ↑');
     }
     
@@ -190,10 +195,10 @@ class CameraController {
 
             // 轉為 Blob
             const blob = await new Promise(resolve => {
-                canvas.toBlob(resolve, 'image/jpeg', 0.95);
+                canvas.toBlob(resolve, 'image/jpeg', 1);
             });
             
-            console.log('capture() blob:', blob, 'bytes');
+            console.log('capture() blob:', blob);
             
             // 處理影像
             await this.processAndPreview(blob);
@@ -208,11 +213,14 @@ class CameraController {
      * 🔑 確保乾淨的初始狀態
      */
     async ensureCleanState() {
+        console.log('↓ ensureCleanState() ↓');
         if (this.stream) {
             await this.cleanupStream();
+            console.log('↑ cleanupStream() ↑');
         }
         
         if (this.video) {
+            console.log('Resetting video element', this.video);
             this.video.pause();
             this.video.srcObject = null;
             this.video.removeAttribute('src');
@@ -227,7 +235,9 @@ class CameraController {
      * 🔑 清理 stream 資源
      */
     async cleanupStream() {
+        console.log('↓ cleanupStream() ↓');
         if (this.stream) {
+            console.log('Cleaning up stream:', this.stream);
             this.stream.getTracks().forEach(track => {
                 track.stop();
                 console.log('🛑 Track stopped:', track.kind);
@@ -243,6 +253,7 @@ class CameraController {
      * 處理檔案上傳
      */
     async handleFile(event) {
+        console.log('↓ handleFile() ↓');
         const file = event.target.files[0];
         if (!file) return;
         
@@ -255,6 +266,8 @@ class CameraController {
         
         // 處理影像
         await this.processAndPreview(file);
+        console.log('↑ processAndPreview() ↑');
+        console.log('↑ handleFile() ↑');
     }
     
     /**
@@ -272,6 +285,7 @@ class CameraController {
             // 儲存處理後的 Blob
             this.currentBlob = await window.imageProcessor.canvasToBlob(result.canvas);
             console.log('canvasToBlob() result:', this.currentBlob);
+            console.log('↑ canvasToBlob() ↑');
 
             // 更新預覽
             this.updatePreview(result);
@@ -363,6 +377,7 @@ class CameraController {
                     'X-CSRFToken': this.getCsrfToken()
                 }
             });
+            console.log('↑ getCsrfToken() ↑');
             
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -393,10 +408,12 @@ class CameraController {
      * 取得 CSRF Token
      */
     getCsrfToken() {
+        console.log('↓ getCsrfToken() ↓');
         const cookieValue = document.cookie
             .split('; ')
             .find(row => row.startsWith('csrftoken='))
             ?.split('=')[1];
+        console.log('Found CSRF token:');
         return cookieValue || '';
     }
 }

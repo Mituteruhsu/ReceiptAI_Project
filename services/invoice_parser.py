@@ -22,6 +22,7 @@ class InvoiceParser:
                 'invoice_type': 'qr'
             }
         """
+        print("↓ InvoiceParser.parse_qr() ↓")
         if not qr_strings:
             raise ValueError("QR 資料為空")
         
@@ -30,18 +31,21 @@ class InvoiceParser:
         items_qr = None
         
         for qr in qr_strings:
-            if qr.count(':') >= 10:  # Items QR
+            if qr.count(':') >= 7:  # Items QR
                 items_qr = qr
             else:  # Header QR
                 header_qr = qr
+        print(f"header_qr: {header_qr}, items_qr: {items_qr}")
         
         if not header_qr:
             raise ValueError("找不到發票 Header QR")
         
         # 解析 Header
-        invoice_number = header_qr[:10]
-        roc_date = header_qr[10:17]
-        total_amount = int(header_qr[29:37])
+        invoice_number = items_qr[:10]
+        roc_date = items_qr[10:17]
+        total_amount = int(items_qr[29:37])
+
+        print(f"Parsed invoice_number: {invoice_number}, roc_date: {roc_date}, total_amount: {total_amount}")
         
         date = InvoiceParser._roc_to_ad_date(roc_date)
         
@@ -50,6 +54,7 @@ class InvoiceParser:
         if items_qr:
             items = InvoiceParser._parse_items_qr(items_qr)
         
+        print("↑ InvoiceParser.parse_qr() ↑")
         return {
             'number': invoice_number,
             'date': date,
