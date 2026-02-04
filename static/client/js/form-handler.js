@@ -22,9 +22,12 @@ class FormHandler {
     fillForm(data) {
         // 自動填入表單
         document.getElementById('id_number').value = data.number || '';
+        document.getElementById('id_buyer').value = data.buyer_id || '';
+        document.getElementById('id_seller').value = data.seller_id || '';
         document.getElementById('id_date').value = data.date || '';
         document.getElementById('id_total').value = data.total || 0;
         document.getElementById('id_category').value = data.category || 'other';
+        document.getElementById('id_subcategory').value = data.subcategory || '';
         document.getElementById('id_invoice_type').value = data.invoice_type || 'paper';
     }
     

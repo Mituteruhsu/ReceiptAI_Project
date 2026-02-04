@@ -7,6 +7,8 @@ from .enums import InvoiceType, Category, SubCategory, OwnerType
 class Invoice(models.Model):
     """發票主表"""
     number = models.CharField('發票號碼', max_length=10, unique=True)
+    buyer_id = models.CharField('買方統編', max_length=8)
+    seller_id = models.CharField('賣方統編', max_length=8)
     date = models.DateField('發票日期')
     total = models.DecimalField('總金額', max_digits=10, decimal_places=2, 
                                 validators=[MinValueValidator(0)])
@@ -14,8 +16,11 @@ class Invoice(models.Model):
                                    choices=[(t.value, t.name) for t in InvoiceType],
                                    default=InvoiceType.PAPER.value)
     category = models.CharField('主分類', max_length=20,
-                               choices=[(c.value, c.name) for c in Category],
-                               default=Category.OTHER.value)
+                                choices=[(c.value, c.name) for c in Category],
+                                default=Category.OTHER.value)
+    sub_category = models.CharField('細分類', max_length=30,
+                                choices=[(s.value, s.label) for s in SubCategory],
+                                null=True, blank=True)
     owner = models.CharField('使用者', max_length=20,
                             choices=[(o.value, o.name) for o in OwnerType],
                             default=OwnerType.ALL.value)

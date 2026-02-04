@@ -114,3 +114,4 @@ class OwnerType(Enum):
     MOTHER = "mother"
     CHILD_1 = "child_1"
     CHILD_2 = "child_2"
+    CHILD_3 = "child_3"

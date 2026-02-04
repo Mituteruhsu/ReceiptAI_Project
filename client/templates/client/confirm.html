@@ -22,7 +22,7 @@
                         <i class="bi bi-receipt"></i> 發票資訊
                     </h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body text-white">
                     {{ form.as_p }}
                 </div>
             </div>
@@ -47,7 +47,7 @@
     
     <!-- 操作按鈕 -->
     <div class="d-flex gap-2 justify-content-end mt-4">
-        <a href="{% url 'client:upload' %}" class="btn btn-secondary">
+        <a href="{% url 'client:upload' %}" class="btn btn-secondary btn-lg">
             <i class="bi bi-x-circle"></i> 取消
         </a>
         <button type="submit" class="btn btn-primary btn-lg">

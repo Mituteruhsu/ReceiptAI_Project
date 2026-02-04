@@ -15,6 +15,28 @@ class InvoiceConfirmForm(forms.Form):
             'placeholder': 'AA12345678'
         })
     )
+
+    # 買方統編
+    buyer_id = forms.CharField(
+        label='買方統編',
+        max_length=8,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '8 碼數字（選填）'
+        })
+    )
+
+    # 賣方統編
+    seller_id = forms.CharField(
+        label='賣方統編',
+        max_length=8,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '8 碼數字（選填）'
+        })
+    )
     
     date = forms.DateField(
         label='發票日期',
@@ -40,6 +62,15 @@ class InvoiceConfirmForm(forms.Form):
         widget=forms.Select(attrs={
             'class': 'form-select',
             'id': 'id_category'
+        })
+    )
+
+    subcategory = forms.ChoiceField(
+        label='細分類',
+        choices=[(s.value, s.label) for s in SubCategory],
+        widget=forms.Select(attrs={
+            'class': 'form-select',
+            'id': 'id_subcategory'
         })
     )
     

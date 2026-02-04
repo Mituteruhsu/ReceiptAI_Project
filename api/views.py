@@ -45,21 +45,21 @@ def process_invoice(request):
         
         # Case 1: 檔案上傳
         if request.FILES.get('image'):
-            print('api/views.py process_invoice - file upload detected')
+            print('api/views.py process_invoice() - file upload detected')
             file = request.FILES['image']
             image = ImageAdapter.from_source(file.read())
-            print('api/views.py process_invoice - image loaded from file')
-            print(f'api/views.py process_invoice - image name: {image}, image size: {image.size}')
+            print('api/views.py process_invoice() - image loaded from file')
+            print(f'api/views.py process_invoice() - image name: {image}, image size: {image.size}')
         
         # Case 2: Base64
         elif request.content_type == 'application/json':
-            print('api/views.py process_invoice - JSON base64 detected')
+            print('api/views.py process_invoice() - JSON base64 detected')
             data = json.loads(request.body)
             image_base64 = data.get('image_base64')
-            print('api/views.py process_invoice - base64 image loaded')
-            print(f'api/views.py process_invoice - image_base64 length: {len(image_base64) if image_base64 else 0}')
+            print('api/views.py process_invoice() - base64 image loaded')
+            print(f'api/views.py process_invoice() - image_base64 length: {len(image_base64) if image_base64 else 0}')
             if image_base64:
-                print('api/views.py process_invoice - converting base64 to image')
+                print('api/views.py process_invoice() - converting base64 to image')
                 image = ImageAdapter.from_source(image_base64)
         
         if image is None:
@@ -70,17 +70,20 @@ def process_invoice(request):
         
         # 步驟 1: 嘗試 QR Code
         qr_result = QRService.decode(image)
+        print("api/views.py QRService.decode() - result:")
         # print(f'QR Code result: {qr_result}')
         raw_qrs = qr_result.get('raw_qrs', [])
-        # print(f'Raw QR codes: {raw_qrs}')
+        print(f'api/views.py process_invoice() - Raw QR codes: {raw_qrs}')
         
         parsed_data = None
         
         if raw_qrs:
             # 有 QR → 解析 QR
             logger.info(f"檢測到 {len(raw_qrs)} 個 QR Code")
-            print(f"檢測到 {len(raw_qrs)} 個 QR Code")
+            print(f"api/views.py process_invoice() - 檢測到 {len(raw_qrs)} 個 QR Code")
             parsed_data = InvoiceParser.parse_qr(raw_qrs)
+            print(f"api/views.py process_invoice() - \n\tParsed data from QR: {parsed_data}")
+            request.session['raw_qr_data'] = raw_qrs
         else:
             # 無 QR → 使用 OCR
             logger.info("未檢測到 QR Code，使用 OCR")
@@ -95,6 +98,7 @@ def process_invoice(request):
                     'error': '無法辨識發票內容'
                 }, status=400)
             
+            request.session['raw_ocr_data'] = raw_text
             parsed_data = InvoiceParser.parse_ocr(raw_text)
         
         # 步驟 2: 分類
@@ -104,8 +108,13 @@ def process_invoice(request):
         result = {
             **parsed_data,
             'category': classified_result['main_category'],
+            'subcategory': classified_result['main_subcategory'],
             'items': classified_result['items']
         }
+        print(f"Final result: {result}")
+
+        request.session['invoice_data'] = result
+        request.session.modified = True
         
         return JsonResponse({
             'success': True,

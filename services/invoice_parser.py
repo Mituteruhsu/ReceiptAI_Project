@@ -22,43 +22,51 @@ class InvoiceParser:
                 'invoice_type': 'qr'
             }
         """
-        print("↓ InvoiceParser.parse_qr() ↓")
+        print("services/invoice_parser.py InvoiceParser.parse_qr() - start")
         if not qr_strings:
             raise ValueError("QR 資料為空")
-        
-        # 分離 Header 和 Items QR
+
         header_qr = None
         items_qr = None
-        
+
         for qr in qr_strings:
-            if qr.count(':') >= 7:  # Items QR
+            if ':' in qr:
                 items_qr = qr
-            else:  # Header QR
+            else:
                 header_qr = qr
-        print(f"header_qr: {header_qr}, items_qr: {items_qr}")
-        
+
         if not header_qr:
             raise ValueError("找不到發票 Header QR")
-        
-        # 解析 items_qr 內容
-        invoice_number = items_qr[:10]
-        roc_date = items_qr[10:17]
-        total_amount = int(items_qr[29:37])
 
-        print(f"Parsed invoice_number: {invoice_number}, roc_date: {roc_date}, total_amount: {total_amount}")
-        
+        # print(f"services/invoice_parser.py InvoiceParser.parse_qr() - \n\theader_qr: {header_qr}")
+        # print(f"services/invoice_parser.py InvoiceParser.parse_qr() - \n\titems_qr: {items_qr}")
+        # ===== Header QR（固定 77 碼）=====
+        invoice_number = items_qr[0:10]
+        roc_date = items_qr[10:17]
         date = InvoiceParser._roc_to_ad_date(roc_date)
         
-        # 解析 Items
+        total_hex = items_qr[29:37]
+        # 十六進位轉十進位
+        total_amount = int(total_hex, 16)
+        
+        buyer_id = items_qr[37:45]
+        buyer_id = None if buyer_id == "00000000" else buyer_id
+        seller_id = items_qr[45:53]
+        
+        print(f"services/invoice_parser.py InvoiceParser.parse_qr()\n\tinvoice_number: {invoice_number}\n\tdate: {date}\n\ttotal_amount: {total_amount}\n\tbuyer_id: {buyer_id}\n\tseller_id: {seller_id}")
+        # ===== Items =====
         items = []
         if items_qr:
             items = InvoiceParser._parse_items_qr(items_qr)
-        
-        print("↑ InvoiceParser.parse_qr() ↑")
+        # print(f"invoice_number: {invoice_number}\n, date: {date}\n, total: {total_amount}\n, buyer_id: {buyer_id}\n, seller_id: {seller_id}\n, items: {items}")
+        # print(f"invoice_type: {InvoiceType.QR.value}")
+        print("services/invoice_parser.py InvoiceParser.parse_qr() - end")
         return {
             'number': invoice_number,
             'date': date,
             'total': total_amount,
+            'buyer_id': buyer_id,
+            'seller_id': seller_id,
             'items': items,
             'invoice_type': InvoiceType.QR.value
         }
@@ -122,9 +130,12 @@ class InvoiceParser:
     @staticmethod
     def _roc_to_ad_date(roc: str) -> str:
         """民國日期轉西元 1110708 → 2022-07-08"""
+        print("services/invoice_parser.py InvoiceParser._roc_to_ad_date() - start")
         year = int(roc[:3]) + 1911
         month = int(roc[3:5])
         day = int(roc[5:7])
+        print(f"services/invoice_parser.py InvoiceParser._roc_to_ad_date() - \n\tyear: {year}\n\tmonth: {month}\n\tday: {day}")
+        print(f"services/invoice_parser.py InvoiceParser._roc_to_ad_date() - end")
         return f"{year:04d}-{month:02d}-{day:02d}"
     
     @staticmethod
@@ -133,14 +144,17 @@ class InvoiceParser:
         解析 Items QR
         格式: :序號:數量:金額:品名:數量:金額:品名...
         """
-        parts = items_qr.split(':')[5:]
+        print("services/invoice_parser.py _parse_items_qr() - start")
+        parts = items_qr.split(':')
+        # print(f"services/invoice_parser.py _parse_items_qr() - \n\tParsing items from QR parts: {parts}")
+
+        # parts[5] 開始才是品目
         items = []
-        
-        for i in range(0, len(parts), 3):
+        for i in range(5, len(parts), 3):
             try:
                 name = parts[i]
-                qty = int(parts[i + 1])
-                price = int(parts[i + 2])
+                qty = float(parts[i + 1])
+                price = float(parts[i + 2])
                 items.append({
                     'name': name,
                     'qty': qty,
@@ -148,5 +162,6 @@ class InvoiceParser:
                 })
             except (IndexError, ValueError):
                 continue
-        
+        print(f"services/invoice_parser.py _parse_items_qr() - \n\tparsed items: {items}")
+        print("services/invoice_parser.py _parse_items_qr() - end")
         return items

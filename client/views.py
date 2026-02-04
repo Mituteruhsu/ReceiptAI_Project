@@ -14,12 +14,17 @@ class UploadView(TemplateView):
 
 class ConfirmView(TemplateView):
     """分類確認頁面"""
+    print("client/views.py ↓ ConfirmView ↓")
     template_name = 'client/confirm.html'
     
     def get_context_data(self, **kwargs):
+        print("↓ ConfirmView.get_context_data() ↓")
         context = super().get_context_data(**kwargs)
+        print(f"context before adding form: {context}")
+        
         # 從 session 取得辨識結果
         invoice_data = self.request.session.get('invoice_data')
+        print(f"invoice_data from session: {invoice_data}")
         
         if invoice_data:
             form = InvoiceConfirmForm(initial=invoice_data)
@@ -36,9 +41,12 @@ class ConfirmView(TemplateView):
             # 儲存到資料庫
             invoice = Invoice.objects.create(
                 number=form.cleaned_data['number'],
+                buyer_id=form.cleaned_data['buyer_id'],
+                seller_id=form.cleaned_data['seller_id'],
                 date=form.cleaned_data['date'],
                 total=form.cleaned_data['total'],
                 category=form.cleaned_data['category'],
+                subcategory=form.cleaned_data['subcategory'],
                 owner=form.cleaned_data['owner'],
                 invoice_type=form.cleaned_data['invoice_type'],
                 raw_qr_data=request.session.get('raw_qr_data'),
@@ -54,6 +62,7 @@ class ConfirmView(TemplateView):
                     quantity=item_data['qty'],
                     unit_price=item_data['price'],
                     category=item_data.get('category'),
+                    subcategory=item_data.get('subcategory'),
                     order=idx
                 )
             
