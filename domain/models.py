@@ -18,7 +18,7 @@ class Invoice(models.Model):
     category = models.CharField('主分類', max_length=20,
                                 choices=[(c.value, c.name) for c in Category],
                                 default=Category.OTHER.value)
-    sub_category = models.CharField('細分類', max_length=30,
+    subcategory = models.CharField('細分類', max_length=30,
                                 choices=[(s.value, s.label) for s in SubCategory],
                                 null=True, blank=True)
     owner = models.CharField('使用者', max_length=20,
@@ -67,7 +67,7 @@ class Item(models.Model):
     category = models.CharField('品項分類', max_length=20,
                                choices=[(c.value, c.value) for c in Category],
                                null=True, blank=True)
-    sub_category = models.CharField('細分類', max_length=30,
+    subcategory = models.CharField('細分類', max_length=30,
                                    choices=SubCategory.get_choices(),
                                    null=True, blank=True)
     

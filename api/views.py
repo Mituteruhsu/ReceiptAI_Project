@@ -87,7 +87,7 @@ def process_invoice(request):
         else:
             # 無 QR → 使用 OCR
             logger.info("未檢測到 QR Code，使用 OCR")
-            print("未檢測到 QR Code，使用 OCR")
+            print("api/views.py process_invoice() - 未檢測到 QR Code，使用 OCR")
             ocr_service = OCRService()
             ocr_result = ocr_service.extract_text(image)
             raw_text = ocr_result.get('raw_text', '')
@@ -103,7 +103,7 @@ def process_invoice(request):
         
         # 步驟 2: 分類
         classified_result = InvoiceClassifier.classify(parsed_data)
-        
+        print(f'api/views.py process_invoice() - \n\tClassified result: \n\t{classified_result}')
         # 合併結果
         result = {
             **parsed_data,
@@ -111,11 +111,13 @@ def process_invoice(request):
             'subcategory': classified_result['main_subcategory'],
             'items': classified_result['items']
         }
-        print(f"Final result: {result}")
+        print(f"api/views.py process_invoice() - \n\tFinal result: {result}")
 
         request.session['invoice_data'] = result
         request.session.modified = True
         
+        print("api/views.py process_invoice() - returning JsonResponse")
+        print(f"api/views.py process_invoice() - end")
         return JsonResponse({
             'success': True,
             'data': result

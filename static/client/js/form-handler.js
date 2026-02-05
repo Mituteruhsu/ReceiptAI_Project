@@ -6,8 +6,10 @@ class FormHandler {
     }
     
     initializeForm() {
+        console.log('form-handler.js FormHandler.initializeForm() - start');
         // 從 sessionStorage 載入資料
         const invoiceData = sessionStorage.getItem('invoiceData');
+        console.log('invoiceData:', invoiceData);
         if (!invoiceData) {
             alert('無發票資料');
             window.location.href = '/';
@@ -17,13 +19,17 @@ class FormHandler {
         const data = JSON.parse(invoiceData);
         this.fillForm(data);
         this.renderItems(data.items || []);
+        console.log('this.fillForm called with data:', data);
+        console.log('this.fillForm(data)', this.fillForm(data)); 
+        console.log('this.renderItems called with items:', data.items || []);
+        console.log('form-handler.js FormHandler.initializeForm() - end');
     }
     
     fillForm(data) {
         // 自動填入表單
         document.getElementById('id_number').value = data.number || '';
-        document.getElementById('id_buyer').value = data.buyer_id || '';
-        document.getElementById('id_seller').value = data.seller_id || '';
+        document.getElementById('id_buyer_id').value = data.buyer_id || '';
+        document.getElementById('id_seller_id').value = data.seller_id || '';
         document.getElementById('id_date').value = data.date || '';
         document.getElementById('id_total').value = data.total || 0;
         document.getElementById('id_category').value = data.category || 'other';

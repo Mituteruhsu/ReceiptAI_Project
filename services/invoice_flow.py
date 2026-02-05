@@ -5,6 +5,7 @@ from services.ocr_service import extract_text
 from services.invoice_parser import parse_qr_set, parse_ocr
 from services.classify_service import classify_invoice
 from infrastructure.google_sheets import save_invoice
+from services.ocr.dual_ocr import DualOCRService
 
 
 def process_invoice(input_data):

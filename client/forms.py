@@ -120,7 +120,7 @@ class ItemForm(forms.Form):
         })
     )
     
-    sub_category = forms.ChoiceField(
+    subcategory = forms.ChoiceField(
         label='細分類',
         choices=[('', '--- 請選擇 ---')] + SubCategory.get_choices(),
         required=False,

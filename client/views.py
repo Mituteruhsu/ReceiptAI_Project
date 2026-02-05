@@ -14,29 +14,32 @@ class UploadView(TemplateView):
 
 class ConfirmView(TemplateView):
     """分類確認頁面"""
-    print("client/views.py ↓ ConfirmView ↓")
     template_name = 'client/confirm.html'
     
     def get_context_data(self, **kwargs):
-        print("↓ ConfirmView.get_context_data() ↓")
+        print("client/views.py ConfirmView.get_context_data() - start")
         context = super().get_context_data(**kwargs)
-        print(f"context before adding form: {context}")
+        print(f"client/views.py ConfirmView.get_context_data() - \n\tcontext before adding form: {context}")
         
         # 從 session 取得辨識結果
         invoice_data = self.request.session.get('invoice_data')
-        print(f"invoice_data from session: {invoice_data}")
+        print(f"client/views.py ConfirmView.get_context_data() - \n\tinvoice_data from session: {invoice_data}")
         
         if invoice_data:
             form = InvoiceConfirmForm(initial=invoice_data)
             context['form'] = form
             context['items'] = invoice_data.get('items', [])
         
+        print(f"client/views.py ConfirmView.get_context_data() - \n\tcontext after adding form: {context}")
+        print("client/views.py ConfirmView.get_context_data() - end")
         return context
     
     def post(self, request, *args, **kwargs):
         """處理確認送出"""
+        print("client/views.py ConfirmView.post() - start")
         form = InvoiceConfirmForm(request.POST)
         
+        print(f"client/views.py ConfirmView.post() - \n\tform data: {form.data}")
         if form.is_valid():
             # 儲存到資料庫
             invoice = Invoice.objects.create(
