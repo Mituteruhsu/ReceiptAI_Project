@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Text Density Detection - 合併重疊框</title>
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+<style>
+canvas { border:1px solid #000; margin:6px; max-width:100%; }
+</style>
+</head>
+<body>
+
+<h2>文字密度偵測 + 合併重疊框</h2>
+
+<input type="file" id="fileInput" accept="image/*"><br><br>
+
+<canvas id="canvasInput"></canvas>
+<canvas id="canvasBinary"></canvas>
+<canvas id="canvasEdges"></canvas>
+<canvas id="canvasResult"></canvas>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const canvasInput = document.getElementById('canvasInput');
+const canvasBinary = document.getElementById('canvasBinary');
+const canvasEdges = document.getElementById('canvasEdges');
+const canvasResult = document.getElementById('canvasResult');
+
+fileInput.addEventListener('change', e => {
+    const img = new Image();
+    img.onload = () => {
+        canvasInput.width = img.width;
+        canvasInput.height = img.height;
+        canvasInput.getContext('2d').drawImage(img,0,0);
+        detectTextRegions();
+    };
+    img.src = URL.createObjectURL(e.target.files[0]);
+});
+
+// 判斷兩個矩形是否重疊
+function rectOverlap(r1, r2) {
+    return !(r2.x > r1.x + r1.width ||
+             r2.x + r2.width < r1.x ||
+             r2.y > r1.y + r1.height ||
+             r2.y + r2.height < r1.y);
+}
+
+// 合併兩個矩形成最小包覆矩形
+function mergeRect(r1, r2) {
+    const x = Math.min(r1.x, r2.x);
+    const y = Math.min(r1.y, r2.y);
+    const x2 = Math.max(r1.x + r1.width, r2.x + r2.width);
+    const y2 = Math.max(r1.y + r1.height, r2.y + r2.height);
+    return {x:x, y:y, width:x2-x, height:y2-y};
+}
+
+// 合併所有重疊矩形
+function mergeOverlappingRects(rects) {
+    let merged = [];
+    for (let rect of rects) {
+        let hasMerged = false;
+        for (let i=0; i<merged.length; i++) {
+            if (rectOverlap(rect, merged[i])) {
+                merged[i] = mergeRect(rect, merged[i]);
+                hasMerged = true;
+                break;
+            }
+        }
+        if (!hasMerged) merged.push(rect);
+    }
+    // 重複合併直到穩定
+    let changed = true;
+    while(changed) {
+        changed = false;
+        for (let i=0; i<merged.length; i++) {
+            for (let j=i+1; j<merged.length; j++) {
+                if (rectOverlap(merged[i], merged[j])) {
+                    merged[i] = mergeRect(merged[i], merged[j]);
+                    merged.splice(j,1);
+                    changed = true;
+                    j--;
+                }
+            }
+        }
+    }
+    return merged;
+}
+
+function detectTextRegions() {
+    let src = cv.imread(canvasInput);
+    let gray = new cv.Mat();
+    let blur = new cv.Mat();
+    let binary = new cv.Mat();
+    let edges = new cv.Mat();
+
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
+    cv.adaptiveThreshold(blur, binary, 255,
+                         cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+                         cv.THRESH_BINARY_INV, 15, 10);
+    cv.Canny(binary, edges, 40, 120);
+    let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(25,25));
+    cv.dilate(edges, edges, kernel);
+
+    let contours = new cv.MatVector();
+    let hierarchy = new cv.Mat();
+    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    // 過濾小框 + 靠邊框
+    let borderMargin = 20;
+    let minArea = 500;
+    let rects = [];
+    for (let i=0; i<contours.size(); i++) {
+        let cnt = contours.get(i);
+        let rect = cv.boundingRect(cnt);
+        if (rect.width*rect.height > minArea &&
+            rect.x > borderMargin &&
+            rect.y > borderMargin &&
+            rect.x + rect.width < src.cols - borderMargin &&
+            rect.y + rect.height < src.rows - borderMargin) {
+            rects.push(rect);
+        }
+    }
+
+    // 合併重疊矩形
+    let mergedRects = mergeOverlappingRects(rects);
+
+    // 畫框
+    let result = src.clone();
+    for (let rect of mergedRects) {
+        cv.rectangle(result, new cv.Point(rect.x, rect.y),
+                             new cv.Point(rect.x + rect.width, rect.y + rect.height),
+                             [255,0,0,255], 3);
+    }
+
+    // 顯示
+    cv.imshow(canvasBinary, binary);
+    cv.imshow(canvasEdges, edges);
+    canvasResult.width = src.cols;
+    canvasResult.height = src.rows;
+    cv.imshow(canvasResult, result);
+
+    // 清理
+    src.delete(); gray.delete(); blur.delete();
+    binary.delete(); edges.delete();
+    contours.delete(); hierarchy.delete(); result.delete();
+}
+</script>
+</body>
+</html>

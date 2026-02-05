@@ -8,4 +8,5 @@ urlpatterns = [
     path('', views.UploadView.as_view(), name='upload'),
     path('confirm/', views.ConfirmView.as_view(), name='confirm'),
     path('success/', views.SuccessView.as_view(), name='success'),
+    path('smartcropper/', views.SmartCropperView.as_view(), name='smartcropper'),
 ]

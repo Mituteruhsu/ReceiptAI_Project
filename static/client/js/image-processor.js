@@ -88,6 +88,18 @@ class ImageProcessor {
         imageData = this.normalize(imageData);
         console.log('正規化後的 imageData', imageData);
 
+        // --- 邊緣偵測（Sobel） ---
+        const edges = this.detectEdges(imageData);
+        console.log('邊緣偵測後的 edges', edges);
+
+        // --- 找發票外框（Bounding Box） ---
+        const box = this.findBoundingBox(edges);
+        console.log('找到的發票外框 box', box);
+
+        // --- 裁切到發票外框 ---
+        imageData = this.cropToBox(imageData, box);
+        console.log('裁切後的 imageData', imageData);
+
         // --- adaptiveThreshold (自適應二值化) ---
         imageData = this.adaptiveThreshold(imageData, 21, 7);
         console.log('自適應二值化後的 imageData', imageData);
@@ -282,6 +294,125 @@ class ImageProcessor {
         return imageData;
     }
 
+    // ==========================
+    // 邊緣偵測（Sobel）
+    detectEdges(imageData) {
+        const { width, height, data } = imageData;
+        const output = new Uint8ClampedArray(data.length);
+
+        const gx = [-1,0,1,-2,0,2,-1,0,1];
+        const gy = [-1,-2,-1,0,0,0,1,2,1];
+
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                let sx = 0, sy = 0;
+                let k = 0;
+
+                for (let ky = -1; ky <= 1; ky++) {
+                    for (let kx = -1; kx <= 1; kx++) {
+                        const i = ((y + ky) * width + (x + kx)) * 4;
+                        const v = data[i];
+                        sx += v * gx[k];
+                        sy += v * gy[k];
+                        k++;
+                    }
+                }
+
+                const mag = Math.sqrt(sx * sx + sy * sy);
+                const idx = (y * width + x) * 4;
+                output[idx] = output[idx+1] = output[idx+2] = mag > 128 ? 255 : 0;
+                output[idx+3] = 255;
+            }
+        }
+
+        imageData.data.set(output);
+        return imageData;
+    }
+
+    // 找發票外框（Bounding Box）
+    findBoundingBox(imageData) {
+        const { width, height, data } = imageData;
+        let minX = width, minY = height, maxX = 0, maxY = 0;
+
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const i = (y * width + x) * 4;
+                if (data[i] > 0) {
+                    minX = Math.min(minX, x);
+                    minY = Math.min(minY, y);
+                    maxX = Math.max(maxX, x);
+                    maxY = Math.max(maxY, y);
+                }
+            }
+        }
+
+        return { minX, minY, maxX, maxY };
+    }
+
+    // 裁切到發票外框
+    cropToBox(imageData, box) {
+        const { minX, minY, maxX, maxY } = box;
+        const w = maxX - minX;
+        const h = maxY - minY;
+
+        const cropped = this.processedCtx.createImageData(w, h);
+
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const src = ((y + minY) * imageData.width + (x + minX)) * 4;
+                const dst = (y * w + x) * 4;
+                cropped.data[dst]     = imageData.data[src];
+                cropped.data[dst + 1] = imageData.data[src + 1];
+                cropped.data[dst + 2] = imageData.data[src + 2];
+                cropped.data[dst + 3] = 255;
+            }
+        }
+
+        this.processedCanvas.width = w;
+        this.processedCanvas.height = h;
+        this.processedCtx.putImageData(cropped, 0, 0);
+
+        return cropped;
+    }
+
+    // 自動旋轉校正
+    estimateSkewAngle(imageData) {
+        const { width, height, data } = imageData;
+        let sumAngle = 0, count = 0;
+
+        for (let y = 0; y < height - 1; y++) {
+            for (let x = 0; x < width - 1; x++) {
+                const i = (y * width + x) * 4;
+                if (data[i] === 255 && data[i + 4] === 255) {
+                    sumAngle += 0;
+                    count++;
+                }
+            }
+        }
+
+        return count ? (sumAngle / count) : 0;
+    }
+
+    // 旋轉畫布
+    rotateCanvas(angle) {
+        const rad = angle * Math.PI / 180;
+        const w = this.processedCanvas.width;
+        const h = this.processedCanvas.height;
+
+        const temp = document.createElement('canvas');
+        temp.width = w;
+        temp.height = h;
+        const tctx = temp.getContext('2d');
+        tctx.drawImage(this.processedCanvas, 0, 0);
+
+        this.processedCtx.clearRect(0, 0, w, h);
+        this.processedCtx.save();
+        this.processedCtx.translate(w / 2, h / 2);
+        this.processedCtx.rotate(rad);
+        this.processedCtx.drawImage(temp, -w / 2, -h / 2);
+        this.processedCtx.restore();
+    }
+    // ==========================
 
     /**
      * 計算影像品質指標

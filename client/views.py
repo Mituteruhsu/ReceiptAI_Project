@@ -92,3 +92,7 @@ class ConfirmView(TemplateView):
 class SuccessView(TemplateView):
     """成功頁面"""
     template_name = 'client/success.html'
+
+class SmartCropperView(TemplateView):
+    """智能裁切頁面"""
+    template_name = 'client/smartcropper.html'
