@@ -37,21 +37,6 @@ class CameraController {
         this.reprocessBtn = document.getElementById('reprocess');
         this.confirmUploadBtn = document.getElementById('confirmUpload');
 
-        // Crop controls
-        this.topMargin = document.getElementById('topMargin');
-        this.bottomMargin = document.getElementById('bottomMargin');
-        this.leftMargin = document.getElementById('leftMargin');
-        this.rightMargin = document.getElementById('rightMargin');
-        this.topValue = document.getElementById('topValue');
-        this.bottomValue = document.getElementById('bottomValue');
-        this.leftValue = document.getElementById('leftValue');
-        this.rightValue = document.getElementById('rightValue');
-        this.resetCropBtn = document.getElementById('resetCropBtn');
-        
-        // New canvases
-        this.canvasResult = document.getElementById('canvasResult');
-        this.canvasCropped = document.getElementById('canvasCropped');
-
         this.stream = null;
         this.currentBlob = null;
         this.isStarting = false;
@@ -73,31 +58,6 @@ class CameraController {
         
         // 重新整理
         this.reprocessBtn?.addEventListener('click', async () => await window.imageProcessor.reprocess());
-
-        // 裁切拉桿事件
-        const updateMarginValue = (input, span) => {
-            if (span) span.textContent = input.value;
-            window.imageProcessor.updateCrop();
-        };
-
-        this.topMargin?.addEventListener('input', () => updateMarginValue(this.topMargin, this.topValue));
-        this.bottomMargin?.addEventListener('input', () => updateMarginValue(this.bottomMargin, this.bottomValue));
-        this.leftMargin?.addEventListener('input', () => updateMarginValue(this.leftMargin, this.leftValue));
-        this.rightMargin?.addEventListener('input', () => updateMarginValue(this.rightMargin, this.rightValue));
-
-        this.resetCropBtn?.addEventListener('click', () => {
-            if (this.topMargin) this.topMargin.value = 0;
-            if (this.bottomMargin) this.bottomMargin.value = 0;
-            if (this.leftMargin) this.leftMargin.value = 0;
-            if (this.rightMargin) this.rightMargin.value = 0;
-            
-            if (this.topValue) this.topValue.textContent = 0;
-            if (this.bottomValue) this.bottomValue.textContent = 0;
-            if (this.leftValue) this.leftValue.textContent = 0;
-            if (this.rightValue) this.rightValue.textContent = 0;
-
-            window.imageProcessor.updateCrop();
-        });
     }
     
     /**
@@ -343,19 +303,22 @@ class CameraController {
      */
     updatePreview(result) {
         console.log('↓ updatePreview() ↓');
+        console.log('updatePreview(result):', result);
         
-        // 隱藏 placeholder
-        const placeholder = this.previewContainer.querySelector('.text-muted');
-        if (placeholder) placeholder.classList.add('d-none');
-        
+        console.log('🔍 Element status:', {
+                previewContainer: this.previewContainer ? '✓ 存在' : '✗ 不存在',
+                processedCanvas: this.processedCanvas ? '✓ 存在' : '✗ 不存在',
+                imageInfo: this.imageInfo ? '✓ 存在' : '✗ 不存在',
+                processOptions: this.processOptions ? '✓ 存在' : '✗ 不存在'
+            });
+            
+        // 清空容器並移除 placeholder
+        this.previewContainer.innerHTML = '';
         this.previewContainer.classList.add('showing-image');
         
-        // 顯示偵測結果與裁切預覽
-        this.canvasResult?.classList.remove('d-none');
-        this.canvasCropped?.classList.remove('d-none');
-        
-        // 隱藏舊的處理畫布
-        this.processedCanvas?.classList.add('d-none');
+        // 顯示處理後影像
+        this.processedCanvas.classList.remove('d-none');
+        this.previewContainer.appendChild(this.processedCanvas);
         
         // 更新影像資訊
         this.imageDimensions.textContent = `${result.width} × ${result.height}`;
@@ -373,19 +336,21 @@ class CameraController {
     clearPreview() {
         console.log('↓ clearPreview() ↓');
         
-        // 顯示 placeholder
-        const placeholder = this.previewContainer?.querySelector('.text-muted');
-        if (placeholder) placeholder.classList.remove('d-none');
+        // 🔑 安全檢查
+        if (this.previewContainer) {
+            this.previewContainer.innerHTML = `
+                <div class="d-flex align-items-center justify-content-center text-muted">
+                    <div class="text-center text-success">
+                        <i class="bi bi-image fs-1 mb-2"></i>
+                        <p class="mb-0">尚未拍攝或上傳影像</p>
+                    </div>
+                </div>
+            `;
+        }
         
-        if (this.canvasResult) this.canvasResult.classList.add('d-none');
-        if (this.canvasCropped) this.canvasCropped.classList.add('d-none');
         if (this.processedCanvas) this.processedCanvas.classList.add('d-none');
         if (this.imageInfo) this.imageInfo.classList.add('d-none');
         if (this.processOptions) this.processOptions.classList.add('d-none');
-
-        // 重置裁切拉桿
-        if (this.resetCropBtn) this.resetCropBtn.click();
-
         console.log('↑ clearPreview() ↑');
     }
     
@@ -400,12 +365,6 @@ class CameraController {
         }
 
         console.log('forming FormData for upload');
-        
-        // 從裁切後的畫布取得最終影像
-        if (this.canvasCropped) {
-            this.currentBlob = await window.imageProcessor.canvasToBlob(this.canvasCropped);
-        }
-
         const formData = new FormData();
         formData.append('image', this.currentBlob, 'invoice.jpg');
         console.log('FormData prepared:', formData);
