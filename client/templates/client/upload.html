@@ -79,6 +79,10 @@
                             <p class="mb-0">尚未拍攝或上傳影像</p>
                         </div>
                     </div>
+                    <!-- 偵測結果（紅框） -->
+                    <canvas id="canvasResult" class="d-none w-100 rounded shadow-sm"></canvas>
+                    <!-- 裁切預覽 -->
+                    <canvas id="canvasCropped" class="d-none w-100 rounded shadow-sm"></canvas>
                 </div>
                 
                 <!-- 原始影像（隱藏） -->
@@ -118,6 +122,38 @@
                         <label class="form-check-label" for="autoContrast">
                             自動對比增強
                         </label>
+                    </div>
+
+                    <hr class="text-white opacity-25">
+                    <h6 class="fw-bold mb-3 text-white">裁切框調整</h6>
+                    <div class="mb-3 text-white">
+                        <label class="form-label d-flex justify-content-between">
+                            上邊距 <span id="topValue">0</span> px
+                        </label>
+                        <input type="range" class="form-range" id="topMargin" min="-500" max="500" value="0">
+                    </div>
+                    <div class="mb-3 text-white">
+                        <label class="form-label d-flex justify-content-between">
+                            下邊距 <span id="bottomValue">0</span> px
+                        </label>
+                        <input type="range" class="form-range" id="bottomMargin" min="-500" max="500" value="0">
+                    </div>
+                    <div class="mb-3 text-white">
+                        <label class="form-label d-flex justify-content-between">
+                            左邊距 <span id="leftValue">0</span> px
+                        </label>
+                        <input type="range" class="form-range" id="leftMargin" min="-500" max="500" value="0">
+                    </div>
+                    <div class="mb-3 text-white">
+                        <label class="form-label d-flex justify-content-between">
+                            右邊距 <span id="rightValue">0</span> px
+                        </label>
+                        <input type="range" class="form-range" id="rightMargin" min="-500" max="500" value="0">
+                    </div>
+                    <div class="d-grid mb-3">
+                        <button id="resetCropBtn" class="btn btn-sm btn-outline-light">
+                            <i class="bi bi-arrow-counterclockwise"></i> 重置裁切
+                        </button>
                     </div>
                     
                     <div class="d-grid gap-2">

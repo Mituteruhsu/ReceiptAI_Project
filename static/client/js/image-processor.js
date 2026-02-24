@@ -14,6 +14,13 @@ class ImageProcessor {
         this.processedCanvas = document.getElementById('processedCanvas');
         this.originalCtx = this.originalCanvas.getContext('2d');
         this.processedCtx = this.processedCanvas.getContext('2d');
+
+        // New canvases for cropping
+        this.canvasResult = document.getElementById('canvasResult');
+        this.canvasCropped = document.getElementById('canvasCropped');
+
+        this.detectedRect = null;
+        this.currentSrc = null; // cv.Mat
     }
 
     /**
@@ -62,68 +69,276 @@ class ImageProcessor {
      */
     applyProcessing(img) {
         console.log('↓ applyProcessing() ↓');
-        const width = img.width;
-        const height = img.height;
-        console.log('From processImage() 原始影像大小', width, height);
 
-        // 設定處理後畫布
-        this.processedCanvas.width = width;
-        this.processedCanvas.height = height;
-        console.log('this.processedCanvas.width:', this.processedCanvas.width, 'this.processedCanvas.height:', this.processedCanvas.height);
-        this.processedCtx.drawImage(img, 0, 0);
-        console.log('影像已繪製至 processedCanvas', img);
+        // 使用 OpenCV 進行文字區域偵測與裁切 (內部會呼叫 updateCrop)
+        this.detectTextRegions();
 
-        // 取得影像資料
-        let imageData = this.processedCtx.getImageData(0, 0, width, height);
-        console.log('取得 imageData', imageData);
-                
-        // // 取得處理選項
-        // const options = this.getProcessingOptions();
-
-        // --- 新增：灰階化 (黑白化) ---
-        imageData = this.grayscale(imageData);
-        console.log('灰階化後的 imageData', imageData);
-
-        // --- Normalize ---
-        imageData = this.normalize(imageData);
-        console.log('正規化後的 imageData', imageData);
-
-        // --- 邊緣偵測（Sobel） ---
-        const edges = this.detectEdges(imageData);
-        console.log('邊緣偵測後的 edges', edges);
-
-        // --- 找發票外框（Bounding Box） ---
-        const box = this.findBoundingBox(edges);
-        console.log('找到的發票外框 box', box);
-
-        // --- 裁切到發票外框 ---
-        imageData = this.cropToBox(imageData, box);
-        console.log('裁切後的 imageData', imageData);
-
-        // --- adaptiveThreshold (自適應二值化) ---
-        imageData = this.adaptiveThreshold(imageData, 21, 7);
-        console.log('自適應二值化後的 imageData', imageData);
-
-        // // --- 可選擇性加入 Morphology 處理 ---
-        // imageData = this.morphClose(imageData);
-        // console.log('Morphology 處理後的 imageData', imageData);
-
-        // // 寫回畫布
-        // this.processedCtx.putImageData(imageData, 0, 0);
-        // console.log('處理後的 imageData 已寫回 processedCanvas', this.processedCanvas);
+        // 取得裁切並增強後的影像進行指標計算
+        const croppedWidth = this.canvasCropped.width;
+        const croppedHeight = this.canvasCropped.height;
+        const croppedCtx = this.canvasCropped.getContext('2d');
+        const imageData = croppedCtx.getImageData(0, 0, croppedWidth, croppedHeight);
 
         // 計算影像品質指標
         const metrics = this.calculateMetrics(imageData);
-        console.log('計算後的影像品質指標 metrics', metrics);
 
-        console.log('處理完成的影像大小', width, height);
+        console.log('處理完成的影像大小', croppedWidth, croppedHeight);
         console.log('↑ applyProcessing() ↑');
         return {
-            width,
-            height,
+            width: croppedWidth,
+            height: croppedHeight,
             metrics,
-            canvas: this.processedCanvas
+            canvas: this.canvasCropped
         };
+    }
+
+    /* ======================
+       Geometry utilities (Ported from smartcropper.html)
+    ====================== */
+
+    rectOverlap(a, b) {
+        return !(
+            b.x > a.x + a.width ||
+            b.x + b.width < a.x ||
+            b.y > a.y + a.height ||
+            b.y + b.height < a.y
+        );
+    }
+
+    mergeRect(a, b) {
+        const x1 = Math.min(a.x, b.x);
+        const y1 = Math.min(a.y, b.y);
+        const x2 = Math.max(a.x + a.width, b.x + b.width);
+        const y2 = Math.max(a.y + a.height, b.y + b.height);
+        return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+    }
+
+    mergeOverlappingRects(rects) {
+        let merged = [];
+
+        for (let r of rects) {
+            let mergedOnce = false;
+            for (let i = 0; i < merged.length; i++) {
+                if (this.rectOverlap(r, merged[i])) {
+                    merged[i] = this.mergeRect(r, merged[i]);
+                    mergedOnce = true;
+                    break;
+                }
+            }
+            if (!mergedOnce) merged.push(r);
+        }
+
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (let i = 0; i < merged.length; i++) {
+                for (let j = i + 1; j < merged.length; j++) {
+                    if (this.rectOverlap(merged[i], merged[j])) {
+                        merged[i] = this.mergeRect(merged[i], merged[j]);
+                        merged.splice(j, 1);
+                        changed = true;
+                        j--;
+                    }
+                }
+            }
+        }
+        return merged;
+    }
+
+    /* ======================
+       Main detection (Ported from smartcropper.html)
+    ====================== */
+
+    detectTextRegions() {
+        if (!cv) {
+            console.error('OpenCV.js not loaded');
+            return;
+        }
+
+        let src = cv.imread(this.originalCanvas);
+        if (this.currentSrc) this.currentSrc.delete();
+        this.currentSrc = src.clone();
+
+        let gray = new cv.Mat();
+        let blur = new cv.Mat();
+        let binary = new cv.Mat();
+        let edges = new cv.Mat();
+
+        // 灰階 + 模糊
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
+
+        // 自適應二值化（文字 → 白）
+        cv.adaptiveThreshold(
+            blur, binary, 255,
+            cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv.THRESH_BINARY_INV,
+            15, 10
+        );
+
+        // 邊緣 + 膨脹（文字聚合）
+        cv.Canny(binary, edges, 40, 120);
+        let kernel = cv.getStructuringElement(
+            cv.MORPH_RECT, new cv.Size(25, 25)
+        );
+        cv.dilate(edges, edges, kernel);
+
+        // 找輪廓
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(
+            edges, contours, hierarchy,
+            cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE
+        );
+
+        const minArea = 800;
+        const marginRatio = 0.05;
+        const marginX = src.cols * marginRatio;
+        const marginY = src.rows * marginRatio;
+
+        let rects = [];
+        for (let i = 0; i < contours.size(); i++) {
+            let rect = cv.boundingRect(contours.get(i));
+            let area = rect.width * rect.height;
+
+            if (area < minArea) continue;
+
+            if (
+                rect.x <= marginX ||
+                rect.y <= marginY ||
+                rect.x + rect.width >= src.cols - marginX ||
+                rect.y + rect.height >= src.rows - marginY
+            ) {
+                continue;
+            }
+            rects.push(rect);
+        }
+
+        let mergedRects = this.mergeOverlappingRects(rects);
+
+        if (mergedRects.length > 0) {
+            let maxRect = mergedRects.reduce((prev, curr) =>
+                (curr.width * curr.height > prev.width * prev.height) ? curr : prev
+            );
+
+            let verticalOverlapRects = mergedRects.filter(r => {
+                return !(r.x + r.width < maxRect.x || r.x > maxRect.x + maxRect.width);
+            });
+
+            let minX = Math.min(...verticalOverlapRects.map(r => r.x));
+            let maxX = Math.max(...verticalOverlapRects.map(r => r.x + r.width));
+            let minY = Math.min(...verticalOverlapRects.map(r => r.y));
+            let maxY = Math.max(...verticalOverlapRects.map(r => r.y + r.height));
+
+            this.detectedRect = {
+                x: minX,
+                y: minY,
+                width: maxX - minX,
+                height: maxY - minY
+            };
+        } else {
+            this.detectedRect = {
+                x: 0,
+                y: 0,
+                width: src.cols,
+                height: src.rows
+            };
+        }
+
+        // 自動套用裁切
+        this.updateCrop();
+
+        // 清理
+        src.delete(); gray.delete(); blur.delete();
+        binary.delete(); edges.delete();
+        contours.delete(); hierarchy.delete();
+        kernel.delete();
+    }
+
+    /**
+     * 裁切功能 (Ported from smartcropper.html 並整合影像增強)
+     */
+    updateCrop() {
+        if (!this.detectedRect || !this.currentSrc) return;
+
+        const top = parseInt(document.getElementById('topMargin')?.value || 0);
+        const bottom = parseInt(document.getElementById('bottomMargin')?.value || 0);
+        const left = parseInt(document.getElementById('leftMargin')?.value || 0);
+        const right = parseInt(document.getElementById('rightMargin')?.value || 0);
+
+        // 計算裁切區域（加上調整值）
+        let cropX = Math.max(0, this.detectedRect.x + left);
+        let cropY = Math.max(0, this.detectedRect.y + top);
+        let cropWidth = Math.min(this.currentSrc.cols - cropX, this.detectedRect.width - left + right);
+        let cropHeight = Math.min(this.currentSrc.rows - cropY, this.detectedRect.height - top + bottom);
+
+        if (cropWidth <= 0 || cropHeight <= 0) {
+            console.error('Invalid crop dimensions');
+            return;
+        }
+
+        // 建立裁切區域
+        let rect = new cv.Rect(cropX, cropY, cropWidth, cropHeight);
+        let croppedMat = this.currentSrc.roi(rect);
+
+        // 1. 先將裁切區域畫到畫布
+        this.canvasCropped.width = cropWidth;
+        this.canvasCropped.height = cropHeight;
+        cv.imshow(this.canvasCropped, croppedMat);
+
+        // 2. 進行影像增強 (原本的功能)
+        const croppedCtx = this.canvasCropped.getContext('2d');
+        let imageData = croppedCtx.getImageData(0, 0, cropWidth, cropHeight);
+
+        const autoContrast = document.getElementById('autoContrast')?.checked;
+
+        // 轉灰階
+        imageData = this.grayscale(imageData);
+
+        // 自動對比
+        if (autoContrast) {
+            imageData = this.normalize(imageData);
+        }
+
+        // 自適應二值化
+        imageData = this.adaptiveThreshold(imageData, 21, 7);
+
+        // 寫回畫布
+        croppedCtx.putImageData(imageData, 0, 0);
+
+        // 3. 在結果圖上畫偵測框 (視覺反饋)
+        let result = this.currentSrc.clone();
+        // 原始偵測框 (紅色)
+        cv.rectangle(
+            result,
+            new cv.Point(this.detectedRect.x, this.detectedRect.y),
+            new cv.Point(this.detectedRect.x + this.detectedRect.width, this.detectedRect.y + this.detectedRect.height),
+            [255, 0, 0, 255],
+            3
+        );
+        // 調整後裁切框 (綠色)
+        cv.rectangle(
+            result,
+            new cv.Point(cropX, cropY),
+            new cv.Point(cropX + cropWidth, cropY + cropHeight),
+            [0, 255, 0, 255],
+            2
+        );
+
+        this.canvasResult.width = this.currentSrc.cols;
+        this.canvasResult.height = this.currentSrc.rows;
+        cv.imshow(this.canvasResult, result);
+
+        croppedMat.delete();
+        result.delete();
+
+        // 4. 更新影像資訊 UI
+        if (window.cameraController) {
+            const metrics = this.calculateMetrics(imageData);
+            window.cameraController.imageDimensions.textContent = `${cropWidth} × ${cropHeight}`;
+            window.cameraController.imageBrightness.textContent = `${metrics.brightness}/255`;
+            window.cameraController.imageSharpness.textContent = metrics.sharpness > 50 ? '良好' : '一般';
+        }
     }
 
     // 灰階化函數
