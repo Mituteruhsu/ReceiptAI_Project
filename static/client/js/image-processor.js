@@ -17,6 +17,37 @@ class ImageProcessor {
 
         this.detectedRect = null;
         this.enhancedMat = null; // cv.Mat (Full Image after Stage 1)
+        this.isCvReady = false;
+
+        // 監聽 OpenCV 載入
+        if (typeof cv !== 'undefined') {
+            this.isCvReady = true;
+        } else {
+            window.addEventListener('opencv-ready', () => {
+                this.isCvReady = true;
+                console.log('✅ OpenCV.js 已就緒 (via custom event)');
+            });
+            // 某些版本的 opencv.js 使用 Module.onRuntimeInitialized
+            if (window.Module) {
+                const oldInit = window.Module.onRuntimeInitialized;
+                window.Module.onRuntimeInitialized = () => {
+                    if (oldInit) oldInit();
+                    this.isCvReady = true;
+                    console.log('✅ OpenCV.js 已就緒 (via onRuntimeInitialized)');
+                };
+            }
+        }
+    }
+
+    /**
+     * 檢查 OpenCV 是否可用
+     */
+    checkCv() {
+        if (typeof cv !== 'undefined' && cv.Mat) {
+            this.isCvReady = true;
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -24,23 +55,34 @@ class ImageProcessor {
      */
     async processImage(imageSource) {
         console.log('↓ processImage() ↓');
+        if (!this.checkCv()) {
+            throw new Error('影像處理模組 (OpenCV) 尚未載入完成，請稍候再試');
+        }
+
         return new Promise((resolve, reject) => {
             const img = new Image();
             const url = URL.createObjectURL(imageSource);
 
             img.onload = () => {
-                console.log('processImage() img.onload');
-                URL.revokeObjectURL(url);
-                
-                // 1. 儲存原始影像
-                this.originalCanvas.width = img.width;
-                this.originalCanvas.height = img.height;
-                this.originalCtx.drawImage(img, 0, 0);
+                try {
+                    console.log('processImage() img.onload');
+                    URL.revokeObjectURL(url);
 
-                // 2. 執行處理流水線
-                const result = this.runPipeline(img);
-                resolve(result);
-                console.log('↑ processImage() ↑');
+                    // 1. 儲存原始影像
+                    this.originalCanvas.width = img.width;
+                    this.originalCanvas.height = img.height;
+                    this.originalCtx.drawImage(img, 0, 0);
+
+                    // 2. 執行處理流水線
+                    const result = this.runPipeline(img);
+                    if (!result) {
+                        throw new Error('影像處理流水線未回傳結果');
+                    }
+                    resolve(result);
+                    console.log('↑ processImage() ↑');
+                } catch (err) {
+                    reject(err);
+                }
             };
 
             img.onerror = () => {
@@ -65,14 +107,16 @@ class ImageProcessor {
         this.detectTextRegions();
 
         // Stage 3 & 4: Crop and OCR Preprocess
-        return this.updateCrop();
+        const result = this.updateCrop();
+        console.log('↑ runPipeline() ↑', result);
+        return result;
     }
 
     /**
      * Stage 1: 影像增強 (協助邊緣檢測)
      */
     applyEnhancement() {
-        if (!cv) return;
+        if (!this.checkCv()) return;
 
         let src = cv.imread(this.originalCanvas);
         let gray = new cv.Mat();
@@ -98,7 +142,7 @@ class ImageProcessor {
      * Stage 2: 定位與偵測 (Detection)
      */
     detectTextRegions() {
-        if (!cv || !this.enhancedMat) return;
+        if (!this.checkCv() || !this.enhancedMat) return;
 
         let src = this.enhancedMat;
         let binary = new cv.Mat();
@@ -164,7 +208,10 @@ class ImageProcessor {
      * Stage 2 & 3: 更新裁切與 OCR 友善處理
      */
     updateCrop() {
-        if (!this.detectedRect || !this.enhancedMat) return;
+        if (!this.detectedRect || !this.enhancedMat) {
+            console.warn('updateCrop() failed: detectedRect or enhancedMat missing');
+            return null;
+        }
 
         const top = parseInt(document.getElementById('topMargin')?.value || 0);
         const bottom = parseInt(document.getElementById('bottomMargin')?.value || 0);
@@ -176,7 +223,10 @@ class ImageProcessor {
         let cropWidth = Math.min(this.enhancedMat.cols - cropX, this.detectedRect.width - left + right);
         let cropHeight = Math.min(this.enhancedMat.rows - cropY, this.detectedRect.height - top + bottom);
 
-        if (cropWidth <= 0 || cropHeight <= 0) return;
+        if (cropWidth <= 0 || cropHeight <= 0) {
+            console.warn('updateCrop() failed: invalid crop dimensions', cropWidth, cropHeight);
+            return null;
+        }
 
         let rect = new cv.Rect(cropX, cropY, cropWidth, cropHeight);
         let croppedMat = this.enhancedMat.roi(rect);

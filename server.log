@@ -27,3 +27,7 @@ Watching for file changes with StatReloader
 [25/Feb/2026 12:11:47] "GET /static/client/css/style.css HTTP/1.1" 200 2185
 [25/Feb/2026 12:11:47] "GET /static/client/js/image-processor.js HTTP/1.1" 200 10761
 [25/Feb/2026 12:11:47] "GET /static/client/js/camera.js HTTP/1.1" 200 8893
+[25/Feb/2026 13:49:37] "GET /client/ HTTP/1.1" 200 10991
+[25/Feb/2026 13:49:38] "GET /static/client/css/style.css HTTP/1.1" 200 2185
+[25/Feb/2026 13:49:38] "GET /static/client/js/image-processor.js HTTP/1.1" 200 12556
+[25/Feb/2026 13:49:38] "GET /static/client/js/camera.js HTTP/1.1" 200 9723

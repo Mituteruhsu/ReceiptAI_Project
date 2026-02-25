@@ -119,16 +119,35 @@ class CameraController {
     }
     
     async capture() {
-        if (!this.stream) return;
+        console.log('↓ capture() ↓');
+        if (!this.stream) {
+            console.warn('capture() failed: no stream');
+            return;
+        }
+
+        // 檢查 OpenCV 是否就緒
+        if (!window.imageProcessor.checkCv()) {
+            alert('影像處理模組 (OpenCV) 尚未載入完成，請稍候再試');
+            return;
+        }
+
         try {
             const canvas = document.createElement('canvas');
             canvas.width = this.video.videoWidth;
             canvas.height = this.video.videoHeight;
+
+            if (canvas.width === 0 || canvas.height === 0) {
+                throw new Error('無法取得視訊畫面尺寸');
+            }
+
             canvas.getContext('2d').drawImage(this.video, 0, 0);
-            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+            const blob = await new Promise((resolve, reject) => {
+                canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas toBlob 失敗')), 'image/jpeg', 0.95);
+            });
             await this.processAndPreview(blob);
         } catch (error) {
             console.error('拍照失敗:', error);
+            alert('拍照失敗: ' + error.message);
         }
     }
 
@@ -151,14 +170,19 @@ class CameraController {
     async processAndPreview(imageSource) {
         try {
             const result = await window.imageProcessor.processImage(imageSource);
-            this.updatePreview(result);
+            if (result) {
+                this.updatePreview(result);
+            } else {
+                throw new Error('影像處理未回傳結果');
+            }
         } catch (error) {
             console.error('處理失敗:', error);
-            alert('影像處理失敗');
+            alert('影像處理失敗: ' + error.message);
         }
     }
     
     updatePreview(result) {
+        if (!result) return;
         if (this.placeholder) this.placeholder.classList.add('d-none');
         [this.stage1, this.stage2, this.stage3].forEach(s => s?.classList.remove('d-none'));
         
@@ -194,7 +218,7 @@ class CameraController {
                 sessionStorage.setItem('invoiceData', JSON.stringify(result.data));
                 window.location.href = '/client/confirm/';
             } else {
-                throw new Error(result.error);
+                throw new Error(result.error || '辨識失敗');
             }
         } catch (error) {
             console.error('上傳失敗:', error);
