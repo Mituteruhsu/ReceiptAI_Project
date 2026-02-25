@@ -109,23 +109,53 @@
                     </div>
                 </div>
                 
-                <!-- 處理選項 -->
-                <div id="processOptions" class="d-none">
-                    <h6 class="fw-bold mb-3 text-white">影像增強選項</h6>
-                    
-                    <div class="form-check mb-2 text-white">
-                        <input class="form-check-input" type="checkbox" id="autoContrast" checked>
-                        <label class="form-check-label" for="autoContrast">
-                            自動對比增強
-                        </label>
+                <!-- 裁切調整控制項 -->
+                <div id="adjustmentControls" class="d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold text-white mb-0">發票範圍調整</h6>
+                        <button id="resetAdjustment" class="btn btn-sm btn-outline-light">重置</button>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small text-white-50 mb-1">上邊距: <span id="topValue">0</span>px</label>
+                            <input type="range" class="form-range" id="topMargin" min="-500" max="500" value="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-white-50 mb-1">下邊距: <span id="bottomValue">0</span>px</label>
+                            <input type="range" class="form-range" id="bottomMargin" min="-500" max="500" value="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-white-50 mb-1">左邊距: <span id="leftValue">0</span>px</label>
+                            <input type="range" class="form-range" id="leftMargin" min="-500" max="500" value="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-white-50 mb-1">右邊距: <span id="rightValue">0</span>px</label>
+                            <input type="range" class="form-range" id="rightMargin" min="-500" max="500" value="0">
+                        </div>
                     </div>
                     
+                    <div class="d-grid">
+                        <button id="applyCrop" class="btn btn-primary btn-lg">
+                            <i class="bi bi-scissors"></i> 套用裁切並優化影像
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 處理選項 (最終確認) -->
+                <div id="processOptions" class="d-none mt-3">
+                    <h6 class="fw-bold mb-3 text-white">OCR 優化結果</h6>
+                    
+                    <div class="alert alert-warning py-2 small mb-3">
+                        <i class="bi bi-info-circle"></i> 請確認影像文字清晰且完整
+                    </div>
+
                     <div class="d-grid gap-2">
-                        <button id="reprocess" class="btn btn-outline-primary" type="button">
-                            <i class="bi bi-arrow-clockwise"></i> 重新處理
+                        <button id="reAdjust" class="btn btn-outline-info">
+                            <i class="bi bi-pencil-square"></i> 重新調整範圍
                         </button>
                         <button id="confirmUpload" class="btn btn-success btn-lg">
-                            <i class="bi bi-check-circle"></i> 確認送出
+                            <i class="bi bi-check-circle"></i> 確認送出辨識
                         </button>
                     </div>
                 </div>
