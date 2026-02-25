@@ -31,15 +31,28 @@ class CameraController {
         this.imageBrightness = document.getElementById('imageBrightness');
         this.imageSharpness = document.getElementById('imageSharpness');
 
+        // <!-- 裁切調整 -->
+        this.adjustmentControls = document.getElementById('adjustmentControls');
+        this.topMargin = document.getElementById('topMargin');
+        this.bottomMargin = document.getElementById('bottomMargin');
+        this.leftMargin = document.getElementById('leftMargin');
+        this.rightMargin = document.getElementById('rightMargin');
+        this.topValue = document.getElementById('topValue');
+        this.bottomValue = document.getElementById('bottomValue');
+        this.leftValue = document.getElementById('leftValue');
+        this.rightValue = document.getElementById('rightValue');
+        this.applyCropBtn = document.getElementById('applyCrop');
+        this.resetAdjustmentBtn = document.getElementById('resetAdjustment');
+
         // <!-- 處理選項 -->
         this.processOptions = document.getElementById('processOptions');
-        this.autoContrast = document.getElementById('autoContrast');
-        this.reprocessBtn = document.getElementById('reprocess');
+        this.reAdjustBtn = document.getElementById('reAdjust');
         this.confirmUploadBtn = document.getElementById('confirmUpload');
 
         this.stream = null;
         this.currentBlob = null;
-        this.isStarting = false;
+        this.originalImage = null; // 儲存原始 Image 物件
+        this.detectedRect = null;  // 儲存自動偵測到的矩陣
 
         this.initEventListeners();
     }
@@ -53,11 +66,20 @@ class CameraController {
         // 檔案上傳
         this.fileInput?.addEventListener('change', (e) => this.handleFile(e));
         
-        // 處理選項
+        // 裁切調整即時預覽
+        [this.topMargin, this.bottomMargin, this.leftMargin, this.rightMargin].forEach(slider => {
+            slider?.addEventListener('input', () => {
+                this.updateSliderValues();
+                this.drawAdjustmentPreview();
+            });
+        });
+
+        this.resetAdjustmentBtn?.addEventListener('click', () => this.resetAdjustment());
+        this.applyCropBtn?.addEventListener('click', () => this.applyCrop());
+        this.reAdjustBtn?.addEventListener('click', () => this.showAdjustmentUI());
+
+        // 最終上傳
         this.confirmUploadBtn?.addEventListener('click', () => this.uploadImage());
-        
-        // 重新整理
-        this.reprocessBtn?.addEventListener('click', async () => await window.imageProcessor.reprocess());
     }
     
     /**
@@ -271,63 +293,156 @@ class CameraController {
     }
     
     /**
-     * 處理並預覽影像
+     * 處理並進入調整階段
      */
     async processAndPreview(imageSource) {
         console.log('↓ processAndPreview() ↓');
         try {
-            console.log('processAndPreview() input:', imageSource);
+            // 載入並初步偵測
+            const result = await window.imageProcessor.loadImage(imageSource);
+            this.originalImage = result.img;
+            this.detectedRect = result.initialRect;
 
-            // 使用 ImageProcessor 處理
-            const result = await window.imageProcessor.processImage(imageSource);
-            console.log('processImage() result:', result);
-
-            // 儲存處理後的 Blob
-            this.currentBlob = await window.imageProcessor.canvasToBlob(result.canvas);
-            console.log('canvasToBlob() result:', this.currentBlob);
-            console.log('↑ canvasToBlob() ↑');
-
-            // 更新預覽
-            this.updatePreview(result);
+            // 進入調整模式
+            this.resetAdjustmentValues();
+            this.showAdjustmentUI();
+            this.drawAdjustmentPreview();
             
-            console.log('✅ 影像處理完成:', result);
+            console.log('✅ 影像載入與偵測完成');
             
         } catch (error) {
             console.error('❌ 影像處理失敗:', error);
             alert('影像處理失敗: ' + error.message);
         }
     }
-    
+
     /**
-     * 更新預覽區域
+     * 顯示調整介面
      */
-    updatePreview(result) {
-        console.log('↓ updatePreview() ↓');
-        console.log('updatePreview(result):', result);
-        
-        console.log('🔍 Element status:', {
-                previewContainer: this.previewContainer ? '✓ 存在' : '✗ 不存在',
-                processedCanvas: this.processedCanvas ? '✓ 存在' : '✗ 不存在',
-                imageInfo: this.imageInfo ? '✓ 存在' : '✗ 不存在',
-                processOptions: this.processOptions ? '✓ 存在' : '✗ 不存在'
-            });
-            
-        // 清空容器並移除 placeholder
-        this.previewContainer.innerHTML = '';
-        this.previewContainer.classList.add('showing-image');
-        
-        // 顯示處理後影像
+    showAdjustmentUI() {
+        this.previewContainer.classList.add('d-none');
         this.processedCanvas.classList.remove('d-none');
-        this.previewContainer.appendChild(this.processedCanvas);
-        
+        this.imageInfo.classList.add('d-none');
+        this.processOptions.classList.add('d-none');
+        this.adjustmentControls.classList.remove('d-none');
+    }
+
+    /**
+     * 重置調整值
+     */
+    resetAdjustmentValues() {
+        this.topMargin.value = 0;
+        this.bottomMargin.value = 0;
+        this.leftMargin.value = 0;
+        this.rightMargin.value = 0;
+        this.updateSliderValues();
+    }
+
+    /**
+     * 更新 Slider 數值顯示
+     */
+    updateSliderValues() {
+        this.topValue.textContent = this.topMargin.value;
+        this.bottomValue.textContent = this.bottomMargin.value;
+        this.leftValue.textContent = this.leftMargin.value;
+        this.rightValue.textContent = this.rightMargin.value;
+    }
+
+    /**
+     * 繪製調整預覽（原圖 + 紅框）
+     */
+    drawAdjustmentPreview() {
+        if (!this.originalImage || !this.detectedRect) return;
+
+        const canvas = this.processedCanvas;
+        const ctx = canvas.getContext('2d');
+
+        // 設定畫布大小為原圖大小
+        canvas.width = this.originalImage.width;
+        canvas.height = this.originalImage.height;
+
+        // 畫原圖
+        ctx.drawImage(this.originalImage, 0, 0);
+
+        // 計算調整後的矩形
+        const rect = this.getCurrentRect();
+
+        // 畫紅框
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = Math.max(5, canvas.width / 200);
+        ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+
+        // 畫半透明遮罩
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        // 上
+        ctx.fillRect(0, 0, canvas.width, rect.y);
+        // 下
+        ctx.fillRect(0, rect.y + rect.height, canvas.width, canvas.height - (rect.y + rect.height));
+        // 左
+        ctx.fillRect(0, rect.y, rect.x, rect.height);
+        // 右
+        ctx.fillRect(rect.x + rect.width, rect.y, canvas.width - (rect.x + rect.width), rect.height);
+    }
+
+    /**
+     * 取得目前調整後的矩形
+     */
+    getCurrentRect() {
+        const top = parseInt(this.topMargin.value);
+        const bottom = parseInt(this.bottomMargin.value);
+        const left = parseInt(this.leftMargin.value);
+        const right = parseInt(this.rightMargin.value);
+
+        return {
+            x: Math.max(0, this.detectedRect.x + left),
+            y: Math.max(0, this.detectedRect.y + top),
+            width: Math.min(this.originalImage.width - (this.detectedRect.x + left), this.detectedRect.width - left + right),
+            height: Math.min(this.originalImage.height - (this.detectedRect.y + top), this.detectedRect.height - top + bottom)
+        };
+    }
+
+    /**
+     * 套用裁切並執行 OCR Friendly 處理
+     */
+    async applyCrop() {
+        console.log('↓ applyCrop() ↓');
+        try {
+            const rect = this.getCurrentRect();
+            const result = await window.imageProcessor.applyFinalProcessing(this.originalImage, rect);
+
+            if (result) {
+                // 儲存最終 Blob
+                this.currentBlob = await window.imageProcessor.canvasToBlob(result.canvas);
+
+                // 顯示最終預覽
+                this.updateFinalPreview(result);
+            }
+        } catch (error) {
+            console.error('❌ 裁切處理失敗:', error);
+            alert('處理失敗，請重試');
+        }
+    }
+
+    /**
+     * 更新最終預覽區域
+     */
+    updateFinalPreview(result) {
+        this.adjustmentControls.classList.add('d-none');
+        this.processOptions.classList.remove('d-none');
+        this.imageInfo.classList.remove('d-none');
+
         // 更新影像資訊
         this.imageDimensions.textContent = `${result.width} × ${result.height}`;
         this.imageBrightness.textContent = `${result.metrics.brightness}/255`;
         this.imageSharpness.textContent = result.metrics.sharpness > 50 ? '良好' : '一般';
-        
-        this.imageInfo.classList.remove('d-none');
-        this.processOptions.classList.remove('d-none');
-        console.log('↑ updatePreview() ↑');
+    }
+
+    /**
+     * 重置所有調整
+     */
+    resetAdjustment() {
+        this.resetAdjustmentValues();
+        this.drawAdjustmentPreview();
     }
     
     /**
@@ -346,11 +461,18 @@ class CameraController {
                     </div>
                 </div>
             `;
+            this.previewContainer.classList.remove('d-none');
         }
         
         if (this.processedCanvas) this.processedCanvas.classList.add('d-none');
         if (this.imageInfo) this.imageInfo.classList.add('d-none');
         if (this.processOptions) this.processOptions.classList.add('d-none');
+        if (this.adjustmentControls) this.adjustmentControls.classList.add('d-none');
+
+        this.originalImage = null;
+        this.detectedRect = null;
+        this.currentBlob = null;
+
         console.log('↑ clearPreview() ↑');
     }
     

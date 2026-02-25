@@ -17,34 +17,31 @@ class ImageProcessor {
     }
 
     /**
-     * 載入影像並處理
-    // param {Blob|File} imageSource - 影像來源
-    // returns {Promise<Object>} - 處理結果
+     * 載入影像並準備進行偵測
+     * @param {Blob|File} imageSource - 影像來源
+     * @returns {Promise<Object>} - 包含載入的圖片與初步偵測結果
      */
-    async processImage(imageSource) {
-        console.log('↓ processImage() ↓');
+    async loadImage(imageSource) {
+        console.log('↓ loadImage() ↓');
         return new Promise((resolve, reject) => {
             const img = new Image();
             const url = URL.createObjectURL(imageSource);
 
             img.onload = () => {
-                console.log('processImage() img.onload 觸發');
                 URL.revokeObjectURL(url);
-                console.log('URL.revokeObjectURL(url) 釋放資源');
-                // console.log('img.width:', img.width, 'img.height:', img.height);
                 
-                // 儲存原始影像
+                // 儲存原始影像到隱藏畫布
                 this.originalCanvas.width = img.width;
                 this.originalCanvas.height = img.height;
                 this.originalCtx.drawImage(img, 0, 0);
-                // console.log('this.originalCanvas.width:', this.originalCanvas.width, 'this.originalCanvas.height:', this.originalCanvas.height);
-                // console.log('原始影像已繪製至 originalCanvas', img);
 
-                // 處理影像
-                const result = this.applyProcessing(img);
-                resolve(result);
-                console.log('processImage() 處理完成，結果:', result);
-                console.log('↑ processImage() ↑');
+                // 執行初步偵測
+                const initialRect = this.detectInvoiceBoundary(img);
+
+                resolve({
+                    img: img,
+                    initialRect: initialRect
+                });
             };
 
             img.onerror = () => {
@@ -53,76 +50,167 @@ class ImageProcessor {
             };
 
             img.src = url;
-            console.log('↑ processImage() ↑');
         });        
     }
 
     /**
-     * 應用 OCR-Friendly 處理
+     * 第一階段：偵測發票邊界
+     * 使用 OpenCV.js 尋找文字密集區域
      */
-    applyProcessing(img) {
-        console.log('↓ applyProcessing() ↓');
-        const width = img.width;
-        const height = img.height;
-        console.log('From processImage() 原始影像大小', width, height);
+    detectInvoiceBoundary(img) {
+        console.log('↓ detectInvoiceBoundary() ↓');
+        if (typeof cv === 'undefined') {
+            console.error('OpenCV.js not loaded');
+            return null;
+        }
 
-        // 設定處理後畫布
-        this.processedCanvas.width = width;
-        this.processedCanvas.height = height;
-        console.log('this.processedCanvas.width:', this.processedCanvas.width, 'this.processedCanvas.height:', this.processedCanvas.height);
-        this.processedCtx.drawImage(img, 0, 0);
-        console.log('影像已繪製至 processedCanvas', img);
+        let src = cv.imread(img);
+        let gray = new cv.Mat();
+        let blur = new cv.Mat();
+        let binary = new cv.Mat();
+        let edges = new cv.Mat();
 
-        // 取得影像資料
-        let imageData = this.processedCtx.getImageData(0, 0, width, height);
-        console.log('取得 imageData', imageData);
-                
-        // // 取得處理選項
-        // const options = this.getProcessingOptions();
+        // 1. 灰階 + 模糊
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
 
-        // --- 新增：灰階化 (黑白化) ---
-        imageData = this.grayscale(imageData);
-        console.log('灰階化後的 imageData', imageData);
+        // 2. 自適應二值化（反相，使文字變白）
+        cv.adaptiveThreshold(
+            blur, binary, 255,
+            cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv.THRESH_BINARY_INV,
+            15, 10
+        );
 
-        // --- Normalize ---
-        imageData = this.normalize(imageData);
-        console.log('正規化後的 imageData', imageData);
+        // 3. 邊緣偵測 + 膨脹（聚合文字區塊）
+        cv.Canny(binary, edges, 40, 120);
+        let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(25, 25));
+        cv.dilate(edges, edges, kernel);
 
-        // --- 邊緣偵測（Sobel） ---
-        const edges = this.detectEdges(imageData);
-        console.log('邊緣偵測後的 edges', edges);
+        // 4. 尋找輪廓
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-        // --- 找發票外框（Bounding Box） ---
-        const box = this.findBoundingBox(edges);
-        console.log('找到的發票外框 box', box);
+        let rects = [];
+        const minArea = 800;
+        const marginRatio = 0.02;
+        const marginX = src.cols * marginRatio;
+        const marginY = src.rows * marginRatio;
 
-        // --- 裁切到發票外框 ---
-        imageData = this.cropToBox(imageData, box);
-        console.log('裁切後的 imageData', imageData);
+        for (let i = 0; i < contours.size(); i++) {
+            let rect = cv.boundingRect(contours.get(i));
+            let area = rect.width * rect.height;
 
-        // --- adaptiveThreshold (自適應二值化) ---
-        imageData = this.adaptiveThreshold(imageData, 21, 7);
-        console.log('自適應二值化後的 imageData', imageData);
+            // 排除太小的區域或太靠近邊緣的噪音
+            if (area < minArea) continue;
+            if (rect.x <= marginX || rect.y <= marginY ||
+                (rect.x + rect.width) >= (src.cols - marginX) ||
+                (rect.y + rect.height) >= (src.rows - marginY)) {
+                continue;
+            }
+            rects.push(rect);
+        }
 
-        // // --- 可選擇性加入 Morphology 處理 ---
-        // imageData = this.morphClose(imageData);
-        // console.log('Morphology 處理後的 imageData', imageData);
+        let finalRect = null;
+        if (rects.length > 0) {
+            // 合併重疊或相近的框 (簡化版：先找最大框，再併入垂直方向重疊的框)
+            let maxRect = rects.reduce((prev, curr) =>
+                (curr.width * curr.height > prev.width * prev.height) ? curr : prev
+            );
 
-        // // 寫回畫布
-        // this.processedCtx.putImageData(imageData, 0, 0);
-        // console.log('處理後的 imageData 已寫回 processedCanvas', this.processedCanvas);
+            let verticalOverlapRects = rects.filter(r => {
+                return !(r.x + r.width < maxRect.x || r.x > maxRect.x + maxRect.width);
+            });
 
-        // 計算影像品質指標
-        const metrics = this.calculateMetrics(imageData);
-        console.log('計算後的影像品質指標 metrics', metrics);
+            let minX = Math.min(...verticalOverlapRects.map(r => r.x));
+            let maxX = Math.max(...verticalOverlapRects.map(r => r.x + r.width));
+            let minY = Math.min(...verticalOverlapRects.map(r => r.y));
+            let maxY = Math.max(...verticalOverlapRects.map(r => r.y + r.height));
 
-        console.log('處理完成的影像大小', width, height);
-        console.log('↑ applyProcessing() ↑');
+            finalRect = {
+                x: minX,
+                y: minY,
+                width: maxX - minX,
+                height: maxY - minY
+            };
+        } else {
+            // 若偵測失敗，預設取中間 80% 區域
+            finalRect = {
+                x: Math.round(src.cols * 0.1),
+                y: Math.round(src.rows * 0.1),
+                width: Math.round(src.cols * 0.8),
+                height: Math.round(src.rows * 0.8)
+            };
+        }
+
+        // 清理記憶體
+        src.delete(); gray.delete(); blur.delete(); binary.delete();
+        edges.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
+
+        console.log('偵測結果:', finalRect);
+        return finalRect;
+    }
+
+    /**
+     * 第二階段：套用最終裁切與 OCR 優化處理
+     */
+    applyFinalProcessing(img, box) {
+        console.log('↓ applyFinalProcessing() ↓', box);
+        if (typeof cv === 'undefined') return null;
+
+        let src = cv.imread(img);
+
+        // 1. 裁切 (ROI)
+        let rect = new cv.Rect(
+            Math.max(0, box.x),
+            Math.max(0, box.y),
+            Math.min(src.cols - box.x, box.width),
+            Math.min(src.rows - box.y, box.height)
+        );
+        let cropped = src.roi(rect);
+
+        // 2. OCR Friendly 處理：灰階 -> 自適應二值化
+        let gray = new cv.Mat();
+        cv.cvtColor(cropped, gray, cv.COLOR_RGBA2GRAY);
+
+        let final = new cv.Mat();
+        // 使用較大的 blockSize 以處理光照不均，並微調 C 值
+        cv.adaptiveThreshold(
+            gray, final, 255,
+            cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv.THRESH_BINARY,
+            21, 10
+        );
+
+        // 3. 輸出到畫布
+        this.processedCanvas.width = final.cols;
+        this.processedCanvas.height = final.rows;
+        cv.imshow(this.processedCanvas, final);
+
+        // 計算指標（用於 UI 顯示）
+        const metrics = this.calculateMetricsFromMat(final);
+
+        // 清理
+        src.delete(); cropped.delete(); gray.delete(); final.delete();
+
         return {
-            width,
-            height,
+            width: this.processedCanvas.width,
+            height: this.processedCanvas.height,
             metrics,
             canvas: this.processedCanvas
+        };
+    }
+
+    /**
+     * 從 OpenCV Mat 計算品質指標
+     */
+    calculateMetricsFromMat(mat) {
+        // 簡單計算平均亮度（對二值化圖來說意義較小，但可維持 UI 一致）
+        let mean = cv.mean(mat)[0];
+        return {
+            brightness: Math.round(mean),
+            sharpness: 100 // 二值化後的邊緣通常很銳利
         };
     }
 
@@ -462,20 +550,6 @@ class ImageProcessor {
         });
     }
 
-    /**
-     * 重新處理（當使用者調整選項後）
-     */
-    async reprocess() {
-        console.trace('↓ reprocess() ↓');
-        // 從原始畫布重新處理
-        const img = new Image();
-        img.onload = () => {
-            const result = this.applyProcessing(img);
-            window.cameraController.updatePreview(result);
-        };
-        img.src = this.originalCanvas.toDataURL();
-        console.log('↑ reprocess() ↑');
-    }
 }
 
 // 全域初始化
