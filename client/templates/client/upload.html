@@ -66,30 +66,40 @@
     <!-- 右側：預覽與處理 -->
     <div class="col-lg-6">
         <div class="d-flex align-items-center mb-3">
-            <h4 class="mb-0">🔍 影像預覽</h4>
+            <h4 class="mb-0">🔍 影像預覽與處理</h4>
         </div>
         
         <div class="card shadow-sm">
             <div class="card-body">
                 <!-- 預覽區 -->
-                <div id="previewContainer" class="bg-light rounded border border-2 border-dashed mb-3">
-                    <div class="d-flex align-items-center justify-content-center text-muted">
-                        <div class="text-center text-success">
-                            <i class="bi bi-image fs-1 mb-2"></i>
-                            <p class="mb-0">尚未拍攝或上傳影像</p>
-                        </div>
+                <div id="previewContainer" class="mb-3">
+                    <div id="placeholder" class="bg-light rounded border border-2 border-dashed p-4 text-center text-muted">
+                        <i class="bi bi-image fs-1 mb-2 text-success"></i>
+                        <p class="mb-0 text-success">尚未拍攝或上傳影像</p>
                     </div>
-                    <!-- 偵測結果（紅框） -->
-                    <canvas id="canvasResult" class="d-none w-100 rounded shadow-sm"></canvas>
-                    <!-- 裁切預覽 -->
-                    <canvas id="canvasCropped" class="d-none w-100 rounded shadow-sm"></canvas>
+
+                    <!-- Stage 1: Initial Enhancement & Detection -->
+                    <div id="stage1" class="d-none mb-4">
+                        <h6 class="fw-bold mb-2"><i class="bi bi-1-square-fill text-primary"></i> 1. 影像增強與邊緣偵測 (協助定位)</h6>
+                        <canvas id="canvasEnhanced" class="w-100 rounded shadow-sm border"></canvas>
+                    </div>
+
+                    <!-- Stage 2: Cropped Area (Enhanced) -->
+                    <div id="stage2" class="d-none mb-4">
+                        <h6 class="fw-bold mb-2"><i class="bi bi-2-square-fill text-primary"></i> 2. 裁切區域預覽 (手動微調)</h6>
+                        <canvas id="canvasCropped" class="w-100 rounded shadow-sm border"></canvas>
+                    </div>
+
+                    <!-- Stage 3: OCR-Friendly Final -->
+                    <div id="stage3" class="d-none mb-4">
+                        <h6 class="fw-bold mb-2"><i class="bi bi-3-square-fill text-success"></i> 3. OCR 友善預處理結果 (辨識用)</h6>
+                        <canvas id="canvasFinal" class="w-100 rounded shadow-sm border"></canvas>
+                    </div>
                 </div>
                 
-                <!-- 原始影像（隱藏） -->
+                <!-- 原始影像與中間產物（隱藏） -->
                 <canvas id="originalCanvas" class="d-none"></canvas>
-                
-                <!-- 處理後影像 -->
-                <canvas id="processedCanvas" class="d-none w-100 rounded shadow-sm"></canvas>
+                <canvas id="canvasResult" class="d-none"></canvas>
                 
                 <!-- 影像資訊 -->
                 <div id="imageInfo" class="d-none">
@@ -114,55 +124,63 @@
                 </div>
                 
                 <!-- 處理選項 -->
-                <div id="processOptions" class="d-none">
-                    <h6 class="fw-bold mb-3 text-white">影像增強選項</h6>
-                    
-                    <div class="form-check mb-2 text-white">
-                        <input class="form-check-input" type="checkbox" id="autoContrast" checked>
-                        <label class="form-check-label" for="autoContrast">
-                            自動對比增強
-                        </label>
-                    </div>
+                <div id="processOptions" class="d-none mt-4">
+                    <div class="card bg-secondary text-white">
+                        <div class="card-body">
+                            <h6 class="fw-bold mb-3"><i class="bi bi-sliders"></i> 影像處理與裁切調整</h6>
 
-                    <hr class="text-white opacity-25">
-                    <h6 class="fw-bold mb-3 text-white">裁切框調整</h6>
-                    <div class="mb-3 text-white">
-                        <label class="form-label d-flex justify-content-between">
-                            上邊距 <span id="topValue">0</span> px
-                        </label>
-                        <input type="range" class="form-range" id="topMargin" min="-500" max="500" value="0">
-                    </div>
-                    <div class="mb-3 text-white">
-                        <label class="form-label d-flex justify-content-between">
-                            下邊距 <span id="bottomValue">0</span> px
-                        </label>
-                        <input type="range" class="form-range" id="bottomMargin" min="-500" max="500" value="0">
-                    </div>
-                    <div class="mb-3 text-white">
-                        <label class="form-label d-flex justify-content-between">
-                            左邊距 <span id="leftValue">0</span> px
-                        </label>
-                        <input type="range" class="form-range" id="leftMargin" min="-500" max="500" value="0">
-                    </div>
-                    <div class="mb-3 text-white">
-                        <label class="form-label d-flex justify-content-between">
-                            右邊距 <span id="rightValue">0</span> px
-                        </label>
-                        <input type="range" class="form-range" id="rightMargin" min="-500" max="500" value="0">
-                    </div>
-                    <div class="d-grid mb-3">
-                        <button id="resetCropBtn" class="btn btn-sm btn-outline-light">
-                            <i class="bi bi-arrow-counterclockwise"></i> 重置裁切
-                        </button>
-                    </div>
-                    
-                    <div class="d-grid gap-2">
-                        <button id="reprocess" class="btn btn-outline-primary" type="button">
-                            <i class="bi bi-arrow-clockwise"></i> 重新處理
-                        </button>
-                        <button id="confirmUpload" class="btn btn-success btn-lg">
-                            <i class="bi bi-check-circle"></i> 確認送出
-                        </button>
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="autoContrast" checked>
+                                <label class="form-check-label" for="autoContrast">
+                                    自動對比增強 (增強邊緣偵測)
+                                </label>
+                            </div>
+
+                            <hr class="opacity-50">
+
+                            <h6 class="small fw-bold mb-3">手動調整裁切範圍 (像素)</h6>
+                            <div class="row g-3 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label small d-flex justify-content-between">
+                                        上 <span id="topValue" class="badge bg-dark">0</span>
+                                    </label>
+                                    <input type="range" class="form-range" id="topMargin" min="-500" max="500" value="0">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small d-flex justify-content-between">
+                                        下 <span id="bottomValue" class="badge bg-dark">0</span>
+                                    </label>
+                                    <input type="range" class="form-range" id="bottomMargin" min="-500" max="500" value="0">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small d-flex justify-content-between">
+                                        左 <span id="leftValue" class="badge bg-dark">0</span>
+                                    </label>
+                                    <input type="range" class="form-range" id="leftMargin" min="-500" max="500" value="0">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small d-flex justify-content-between">
+                                        右 <span id="rightValue" class="badge bg-dark">0</span>
+                                    </label>
+                                    <input type="range" class="form-range" id="rightMargin" min="-500" max="500" value="0">
+                                </div>
+                            </div>
+
+                            <div class="d-grid mb-3">
+                                <button id="resetCropBtn" class="btn btn-sm btn-outline-light">
+                                    <i class="bi bi-arrow-counterclockwise"></i> 重置裁切範圍
+                                </button>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button id="reprocess" class="btn btn-primary" type="button">
+                                    <i class="bi bi-arrow-clockwise"></i> 重新套用設定
+                                </button>
+                                <button id="confirmUpload" class="btn btn-success btn-lg">
+                                    <i class="bi bi-check-circle"></i> 確認並送出辨識
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
