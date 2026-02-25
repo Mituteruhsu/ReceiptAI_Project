@@ -1,16 +1,122 @@
 {% extends 'client/base.html' %}
+{% load static %}
+
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card shadow">
+<div class="row g-4">
+    <!-- 左側：相機與檔案控制 -->
+    <div class="col-lg-6">
+        <div class="card shadow-sm mb-4">
             <div class="card-body">
-                <h4 class="card-title mb-4">📸 上傳發票</h4>
-                <div class="mb-3">
-                    <label for="imageUpload" class="form-label">選擇圖片</label>
-                    <input type="file" class="form-control" id="imageUpload" accept="image/*">
+                <h4 class="card-title mb-3">📸 拍攝發票</h4>
+
+                <!-- 相機預覽區 -->
+                <div class="ratio ratio-4x3 bg-dark rounded mb-3 position-relative overflow-hidden">
+                    <video id="video" autoplay playsinline class="d-none position-absolute top-0 start-0 w-100 h-100"></video>
+                    <div id="cameraPlaceholder" class="d-flex align-items-center justify-content-center text-muted">
+                        <div class="text-center text-success">
+                            <i class="bi bi-camera fs-1 mb-2"></i>
+                            <p class="mb-0">點擊下方按鈕開啟相機</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="d-grid">
-                    <button id="processBtn" class="btn btn-primary btn-lg">開始辨識</button>
+
+                <!-- 控制按鈕 -->
+                <div class="d-grid gap-2">
+                    <button id="startCamera" class="btn btn-primary">
+                        <i class="bi bi-camera"></i> 開啟相機
+                    </button>
+                    <button id="capture" class="btn btn-success d-none">
+                        <i class="bi bi-camera-fill"></i> 拍照
+                    </button>
+                    <button id="stopCamera" class="btn btn-secondary d-none">
+                        <i class="bi bi-x-circle"></i> 關閉相機
+                    </button>
+                </div>
+
+                <div class="text-center my-3">
+                    <span class="badge bg-secondary">或</span>
+                </div>
+
+                <!-- 檔案上傳 -->
+                <div class="mb-0">
+                    <label for="fileInput" class="form-label">選擇發票圖片</label>
+                    <input type="file" class="form-control" id="fileInput" accept="image/*">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右側：預覽與調整 -->
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h4 class="card-title mb-3">🔍 影像處理</h4>
+
+                <!-- 預覽區 -->
+                <div id="previewContainer" class="bg-dark rounded border border-secondary mb-3 d-flex align-items-center justify-content-center" style="min-height: 300px;">
+                    <div class="text-center text-muted">
+                        <i class="bi bi-image fs-1 mb-2"></i>
+                        <p class="mb-0">尚未拍攝或上傳影像</p>
+                    </div>
+                </div>
+
+                <!-- 原始影像畫布 (隱藏) -->
+                <canvas id="originalCanvas" class="d-none"></canvas>
+
+                <!-- 處理/調整畫布 -->
+                <canvas id="processedCanvas" class="d-none w-100 rounded shadow-sm"></canvas>
+
+                <!-- 裁切調整控制項 -->
+                <div id="adjustmentControls" class="d-none mt-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0">發票範圍調整</h6>
+                        <button id="resetAdjustment" class="btn btn-sm btn-outline-light">重置</button>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small text-white-50 mb-1">上: <span id="topValue">0</span>px</label>
+                            <input type="range" class="form-range" id="topMargin" min="-500" max="500" value="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-white-50 mb-1">下: <span id="bottomValue">0</span>px</label>
+                            <input type="range" class="form-range" id="bottomMargin" min="-500" max="500" value="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-white-50 mb-1">左: <span id="leftValue">0</span>px</label>
+                            <input type="range" class="form-range" id="leftMargin" min="-500" max="500" value="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-white-50 mb-1">右: <span id="rightValue">0</span>px</label>
+                            <input type="range" class="form-range" id="rightMargin" min="-500" max="500" value="0">
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button id="applyCrop" class="btn btn-primary">
+                            <i class="bi bi-scissors"></i> 套用裁切並優化
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 最終確認與送出 -->
+                <div id="processOptions" class="d-none mt-3">
+                    <div id="imageInfo" class="alert alert-dark py-2 small mb-3">
+                        <div class="row text-center">
+                            <div class="col-4">尺寸: <span id="imageDimensions">-</span></div>
+                            <div class="col-4">亮度: <span id="imageBrightness">-</span></div>
+                            <div class="col-4">清晰度: <span id="imageSharpness">-</span></div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button id="reAdjust" class="btn btn-outline-info">
+                            <i class="bi bi-pencil-square"></i> 重新調整範圍
+                        </button>
+                        <button id="confirmUpload" class="btn btn-success btn-lg">
+                            <i class="bi bi-check-circle"></i> 確認送出辨識
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -18,30 +124,15 @@
 </div>
 {% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+    #video { filter: grayscale(100%) contrast(120%); object-fit: cover; }
+    .form-range::-webkit-slider-thumb { background: #3bf6b8; }
+</style>
+{% endblock %}
+
 {% block extra_js %}
-<script>
-document.getElementById('processBtn').onclick = async () => {
-    const file = document.getElementById('imageUpload').files[0];
-    if (!file) return alert('請先選擇檔案');
-
-    const formData = new FormData();
-    formData.append('image', file);
-
-    try {
-        const response = await fetch('/api/process/', {
-            method: 'POST',
-            body: formData
-        });
-        const result = await response.json();
-        if (result.success) {
-            sessionStorage.setItem('invoiceData', JSON.stringify(result.data));
-            window.location.href = '/client/confirm/';
-        } else {
-            alert('辨識失敗: ' + result.error);
-        }
-    } catch (e) {
-        alert('連線錯誤');
-    }
-};
-</script>
+<script src="{% static 'client/js/image-processor.js' %}"></script>
+<script src="{% static 'client/js/camera.js' %}"></script>
 {% endblock %}

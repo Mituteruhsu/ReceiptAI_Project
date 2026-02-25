@@ -1,0 +1,21 @@
+Watching for file changes with StatReloader
+[25/Feb/2026 20:09:20] "GET /client/ HTTP/1.1" 200 8012
+[25/Feb/2026 20:09:20] "GET /static/client/js/camera.js HTTP/1.1" 200 8430
+[25/Feb/2026 20:09:20] "GET /static/client/js/image-processor.js HTTP/1.1" 200 4998
+[25/Feb/2026 20:11:12] "GET /client/ HTTP/1.1" 200 8012
+[25/Feb/2026 20:11:12] "GET /static/client/js/camera.js HTTP/1.1" 200 8430
+[25/Feb/2026 20:11:12] "GET /static/client/js/image-processor.js HTTP/1.1" 200 4998
+[25/Feb/2026 20:15:28] "GET /client/ HTTP/1.1" 200 8012
+[25/Feb/2026 20:15:28] "GET /static/client/js/image-processor.js HTTP/1.1" 200 4998
+[25/Feb/2026 20:15:28] "GET /static/client/js/camera.js HTTP/1.1" 200 8430
+[25/Feb/2026 20:18:08] "GET /client/ HTTP/1.1" 200 8012
+[25/Feb/2026 20:18:08] "GET /static/client/js/image-processor.js HTTP/1.1" 200 4998
+[25/Feb/2026 20:18:08] "GET /static/client/js/camera.js HTTP/1.1" 200 8430
+[25/Feb/2026 20:21:02] "GET /client/ HTTP/1.1" 200 8012
+[25/Feb/2026 20:21:02] "GET /static/client/js/camera.js HTTP/1.1" 200 8430
+[25/Feb/2026 20:21:02] "GET /static/client/js/image-processor.js HTTP/1.1" 200 4998
+[25/Feb/2026 20:22:28] "GET /client/ HTTP/1.1" 200 8012
+[25/Feb/2026 20:22:28] "GET /static/client/js/camera.js HTTP/1.1" 200 8430
+[25/Feb/2026 20:22:28] "GET /static/client/js/image-processor.js HTTP/1.1" 200 4998
+[25/Feb/2026 20:22:30] "POST /api/process/ HTTP/1.1" 200 125
+[25/Feb/2026 20:22:30] "GET /client/confirm/ HTTP/1.1" 200 4481
