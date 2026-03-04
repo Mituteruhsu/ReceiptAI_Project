@@ -2,13 +2,16 @@ from services.recognition import OCRService, QRService
 from services.invoice_parser import InvoiceParser
 from services.classify_service import InvoiceClassifier
 
+# === 業務流程編排器 ===
 class InvoiceFlow:
+    # --- 初始化 ---
     def __init__(self):
         self.ocr_service = OCRService()
         self.qr_service = QRService()
         self.parser = InvoiceParser()
         self.classifier = InvoiceClassifier()
 
+    # --- 核心處理流程 ---
     def process(self, image_data):
         # 1. Try QR first
         qr_data = self.qr_service.recognize(image_data)

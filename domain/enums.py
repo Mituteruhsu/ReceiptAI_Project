@@ -1,3 +1,4 @@
+# === 領域列舉值 ===
 from enum import Enum
 
 class InvoiceType(Enum):

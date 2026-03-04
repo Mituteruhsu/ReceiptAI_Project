@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 from .enums import InvoiceType, Category, SubCategory
 
+# === 領域實體 ===
+
 @dataclass
 class Item:
     name: str
@@ -29,6 +31,7 @@ class Invoice:
         if self.total == 0:
             self.total = sum(i.total_price for i in self.items)
 
+    # --- 序列化轉換 ---
     def to_dict(self):
         return {
             "number": self.number,

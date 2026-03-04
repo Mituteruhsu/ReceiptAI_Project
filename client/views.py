@@ -1,3 +1,4 @@
+# === 用戶端頁面視圖 ===
 from django.shortcuts import render
 
 def upload(request):

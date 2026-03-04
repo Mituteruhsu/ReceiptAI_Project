@@ -1,4 +1,8 @@
+/**
+ * CameraController: 負責處理相機串流、影像擷取及 UI 流程控制
+ */
 class CameraController {
+    // === 初始化相關 ===
     constructor() {
         this.video = document.getElementById('video');
         this.cameraPlaceholder = document.getElementById('cameraPlaceholder');
@@ -39,6 +43,7 @@ class CameraController {
         this.initEventListeners();
     }
 
+    // === 事件監聽 ===
     initEventListeners() {
         this.startCameraBtn?.addEventListener('click', () => this.start());
         this.stopCameraBtn?.addEventListener('click', () => this.stop());
@@ -61,6 +66,7 @@ class CameraController {
         this.confirmUploadBtn?.addEventListener('click', () => this.uploadImage());
     }
 
+    // === 相機控制 ===
     async start() {
         try {
             this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -93,6 +99,7 @@ class CameraController {
         await this.processAndPreview(blob);
     }
 
+    // === 影像來源處理 ===
     async handleFile(e) {
         const file = e.target.files[0];
         if (file) await this.processAndPreview(file);
@@ -107,6 +114,7 @@ class CameraController {
         this.drawAdjustmentPreview();
     }
 
+    // === UI 狀態切換 ===
     showAdjustmentUI() {
         this.previewContainer.classList.add('d-none');
         this.processedCanvas.classList.remove('d-none');
@@ -119,6 +127,7 @@ class CameraController {
         this.topValue.textContent = this.bottomValue.textContent = this.leftValue.textContent = this.rightValue.textContent = 0;
     }
 
+    // === 預覽繪製與切割計算 ===
     drawAdjustmentPreview() {
         if (!this.originalImage) return;
         const canvas = this.processedCanvas;
@@ -149,6 +158,7 @@ class CameraController {
         };
     }
 
+    // === 裁切與後處理流程 ===
     async applyCrop() {
         const result = window.imageProcessor.applyFinalProcessing(this.originalImage, this.getCurrentRect());
         this.currentBlob = await window.imageProcessor.canvasToBlob(result.canvas);
@@ -161,6 +171,7 @@ class CameraController {
 
     resetAdjustment() { this.resetAdjustmentValues(); this.drawAdjustmentPreview(); }
 
+    // === 伺服器通訊 ===
     async uploadImage() {
         if (!this.currentBlob) return alert('請先處理影像');
         const formData = new FormData();

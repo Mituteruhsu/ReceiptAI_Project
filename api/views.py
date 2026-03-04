@@ -4,6 +4,7 @@ from django.views.decorators.http import require_http_methods
 from services.invoice_flow import InvoiceFlow
 import json
 
+# === 辨識 API 視圖 ===
 @csrf_exempt
 @require_http_methods(["POST"])
 def process_invoice(request):

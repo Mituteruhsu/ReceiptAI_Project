@@ -1,7 +1,9 @@
 from domain.entities import Invoice, Item
 from domain.enums import InvoiceType
 
+# === 發票資料解析器 ===
 class InvoiceParser:
+    # --- QR Code 解析 ---
     @staticmethod
     def parse_qr(raw_qrs):
         # Mock parsing logic
@@ -12,6 +14,7 @@ class InvoiceParser:
             invoice_type=InvoiceType.QR
         )
 
+    # --- OCR 文字解析 ---
     @staticmethod
     def parse_ocr(raw_text):
         # Mock parsing logic

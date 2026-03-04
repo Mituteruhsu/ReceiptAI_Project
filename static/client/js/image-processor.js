@@ -2,13 +2,18 @@
  * OCR-Friendly 影像處理器
  * 優化影像以提高辨識率
  */
+/**
+ * ImageProcessor: 封裝 OpenCV.js 影像處理邏輯
+ */
 class ImageProcessor {
+    // === 初始化 ===
     constructor() {
         this.originalCanvas = document.getElementById('originalCanvas');
         this.processedCanvas = document.getElementById('processedCanvas');
         this.originalCtx = this.originalCanvas.getContext('2d');
     }
 
+    // === 影像載入與資源準備 ===
     async loadImage(imageSource) {
         return new Promise((resolve, reject) => {
             const img = new Image();
@@ -29,6 +34,7 @@ class ImageProcessor {
         });
     }
 
+    // === 發票邊界自動偵測 (OpenCV) ===
     detectInvoiceBoundary(img) {
         if (typeof cv === 'undefined' || !cv.Mat) {
             console.warn('OpenCV not loaded, returning default boundary');
@@ -75,6 +81,7 @@ class ImageProcessor {
         return finalRect;
     }
 
+    // === OCR 友善預處理 (二值化/降噪) ===
     applyFinalProcessing(img, box) {
         if (typeof cv === 'undefined' || !cv.Mat) {
             this.processedCanvas.width = box.width;
@@ -102,6 +109,7 @@ class ImageProcessor {
         return { width: this.processedCanvas.width, height: this.processedCanvas.height, metrics: { brightness: Math.round(mean), sharpness: 100 }, canvas: this.processedCanvas };
     }
 
+    // === 輔助工具 ===
     async canvasToBlob(canvas, quality = 0.9) {
         return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
     }

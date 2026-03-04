@@ -1,7 +1,9 @@
 from domain.entities import Invoice
 from domain.enums import Category, SubCategory
 
+# === 發票分類服務 ===
 class InvoiceClassifier:
+    # --- 分類邏輯 ---
     @staticmethod
     def classify(invoice: Invoice):
         # Mock classification logic

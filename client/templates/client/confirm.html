@@ -38,6 +38,7 @@
 
 {% block extra_js %}
 <script>
+// === 頁面初始化與資料載入 ===
 document.addEventListener('DOMContentLoaded', () => {
     const data = JSON.parse(sessionStorage.getItem('invoiceData'));
     if (!data) return;
@@ -71,6 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// === 表單提交處理 ===
 document.getElementById('invoiceForm').onsubmit = (e) => {
     e.preventDefault();
     alert('感謝確認！儲存功能開發中...');
