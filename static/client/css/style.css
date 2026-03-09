@@ -19,7 +19,6 @@ body {
 
 /* 讓相機預覽即時顯示黑白 */
 #video {
-    filter: grayscale(100%) contrast(120%);
     object-fit: cover;
 }
 

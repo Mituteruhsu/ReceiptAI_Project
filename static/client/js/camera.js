@@ -1,4 +1,4 @@
-// static/client/js/camera.js
+﻿// static/client/js/camera.js
 
 class CameraController {
     constructor() {
@@ -206,9 +206,7 @@ class CameraController {
         console.log('↑ stop() ↑');
     }
     
-    /**
-     * 拍照
-     */
+    /* 拍照 */
     async capture() {
         console.log('↓ capture() ↓');
         console.log('capture() video size',
@@ -249,9 +247,7 @@ class CameraController {
         }
     }
 
-    /**
-     * 🔑 確保乾淨的初始狀態
-     */
+    /** 🔑 確保乾淨的初始狀態 */
     async ensureCleanState() {
         console.log('↓ ensureCleanState() ↓');
         if (this.stream) {
@@ -310,15 +306,16 @@ class CameraController {
         console.log('↑ handleFile() ↑');
     }
     
-    /**
-     * 處理並預覽影像
-     */
+    /* 處理並預覽影像 */
     async processAndPreview(imageSource) {
         console.log('↓ processAndPreview() ↓');
         try {
             console.log('processAndPreview() input:', imageSource);
 
-            // 使用 ImageProcessor 處理
+            /*
+            image-processor.js
+            ImageProcessor.processImage(imageSource) 處理
+            */
             const result = await window.imageProcessor.processImage(imageSource);
             console.log('processImage() result:', result);
 

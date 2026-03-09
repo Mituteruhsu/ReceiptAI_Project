@@ -23,9 +23,7 @@ class ImageProcessor {
         this.currentSrc = null; // cv.Mat (Processed Full Image)
     }
 
-    /**
-     * 載入影像並處理
-     */
+    /* 載入影像並處理 */
     async processImage(imageSource) {
         console.log('↓ processImage() ↓');
         return new Promise((resolve, reject) => {
@@ -41,7 +39,7 @@ class ImageProcessor {
                 this.originalCanvas.height = img.height;
                 this.originalCtx.drawImage(img, 0, 0);
 
-                // 處理影像
+                // 處理影像 applyProcessing(img)
                 const result = this.applyProcessing(img);
                 resolve(result);
                 console.log('processImage() 處理完成');
@@ -57,9 +55,7 @@ class ImageProcessor {
         });        
     }
 
-    /**
-     * 應用 OCR-Friendly 處理
-     */
+    /* 應用 OCR-Friendly 處理 */
     applyProcessing(img) {
         console.log('↓ applyProcessing() ↓');
         
@@ -88,9 +84,7 @@ class ImageProcessor {
         };
     }
 
-    /**
-     * 全圖預處理：轉黑白與增強
-     */
+    /* 全圖預處理：轉黑白與增強 */
     fullPreprocess() {
         if (!cv) return;
 
@@ -108,9 +102,11 @@ class ImageProcessor {
 
         // 拍完照片先轉黑白 (Grayscale + Threshold)
         imageData = this.grayscale(imageData);
+        // 選項打勾：自動對比增強 (Normalization)
         if (autoContrast) {
             imageData = this.normalize(imageData);
         }
+        // 自適應閾值 (Adaptive Threshold)
         imageData = this.adaptiveThreshold(imageData, 21, 7);
 
         // 寫回畫布
@@ -122,9 +118,9 @@ class ImageProcessor {
     }
 
     /* ======================
-       Geometry utilities
+       進行自動裁切 (偵測文字區域) Geometry utilities
     ====================== */
-
+    // 矩形重疊檢測 detectTextRegions()
     rectOverlap(a, b) {
         return !(
             b.x > a.x + a.width ||
@@ -134,6 +130,7 @@ class ImageProcessor {
         );
     }
 
+    // 合併兩個矩形 mergeOverlappingRects(rects)
     mergeRect(a, b) {
         const x1 = Math.min(a.x, b.x);
         const y1 = Math.min(a.y, b.y);
@@ -142,6 +139,7 @@ class ImageProcessor {
         return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
     }
 
+    // 合併重疊矩形 detectTextRegions()
     mergeOverlappingRects(rects) {
         let merged = [];
         for (let r of rects) {
@@ -174,7 +172,7 @@ class ImageProcessor {
     }
 
     /* ======================
-       Main detection
+       進行自動裁切 (偵測文字區域) Main detection
     ====================== */
 
     detectTextRegions() {
@@ -189,9 +187,11 @@ class ImageProcessor {
         let binary = new cv.Mat();
         let edges = new cv.Mat();
 
+        // 1. 邊緣檢測 + 膨脹
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
         cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
 
+        // 自適應閾值 (Adaptive Threshold)
         cv.adaptiveThreshold(
             blur, binary, 255,
             cv.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -199,19 +199,22 @@ class ImageProcessor {
             15, 10
         );
 
+        // 邊緣檢測
         cv.Canny(binary, edges, 40, 120);
         let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(25, 25));
         cv.dilate(edges, edges, kernel);
 
+        // 2. 找輪廓
         let contours = new cv.MatVector();
         let hierarchy = new cv.Mat();
         cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
+        // 3. 過濾與合併矩形
         const minArea = 800;
         const marginRatio = 0.05;
         const marginX = src.cols * marginRatio;
         const marginY = src.rows * marginRatio;
-
+        // 過濾小面積和邊緣的矩形
         let rects = [];
         for (let i = 0; i < contours.size(); i++) {
             let rect = cv.boundingRect(contours.get(i));
@@ -221,8 +224,9 @@ class ImageProcessor {
             rects.push(rect);
         }
 
+        // 合併重疊矩形 mergeOverlappingRects(rects)
         let mergedRects = this.mergeOverlappingRects(rects);
-
+        // 從合併後的矩形中選擇包含最多垂直重疊矩形的最大矩形
         if (mergedRects.length > 0) {
             let maxRect = mergedRects.reduce((prev, curr) => (curr.width * curr.height > prev.width * prev.height) ? curr : prev);
             let verticalOverlapRects = mergedRects.filter(r => !(r.x + r.width < maxRect.x || r.x > maxRect.x + maxRect.width));
@@ -235,6 +239,7 @@ class ImageProcessor {
             this.detectedRect = { x: 0, y: 0, width: src.cols, height: src.rows };
         }
 
+        // 4. 更新裁切預覽 
         this.updateCrop();
 
         gray.delete(); blur.delete(); binary.delete(); edges.delete(); contours.delete(); hierarchy.delete(); kernel.delete();
@@ -279,7 +284,7 @@ class ImageProcessor {
             window.cameraController.imageSharpness.textContent = metrics.sharpness > 50 ? '良好' : '一般';
         }
     }
-
+    // 轉黑白 (Grayscale) fullPreprocess() 呼叫
     grayscale(imageData) {
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
@@ -289,6 +294,7 @@ class ImageProcessor {
         return imageData;
     }
 
+    // 自動對比增強（Normalization fullPreprocess() 呼叫
     normalize(imageData) {
         const data = imageData.data;
         let sum = 0, sq = 0, n = data.length / 4;
@@ -305,7 +311,7 @@ class ImageProcessor {
         }
         return imageData;
     }
-
+    // 自適應閾值 (Adaptive Threshold) fullPreprocess() 呼叫
     adaptiveThreshold(imageData, blockSize = 21, C = 7) {
         const { width, height, data } = imageData;
         const output = new Uint8ClampedArray(data.length);
