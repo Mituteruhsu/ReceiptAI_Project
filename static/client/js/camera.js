@@ -46,6 +46,12 @@ class CameraController {
         this.bottomValue = document.getElementById('bottomValue');
         this.leftValue = document.getElementById('leftValue');
         this.rightValue = document.getElementById('rightValue');
+        this.topNarrow = document.getElementById('topNarrow');
+        this.bottomNarrow = document.getElementById('bottomNarrow');
+        this.rotateAngle = document.getElementById('rotateAngle');
+        this.topNarrowValue = document.getElementById('topNarrowValue');
+        this.bottomNarrowValue = document.getElementById('bottomNarrowValue');
+        this.rotateAngleValue = document.getElementById('rotateAngleValue');
         this.resetCropBtn = document.getElementById('resetCropBtn');
         
         // New canvases
@@ -77,32 +83,67 @@ class CameraController {
         // 裁切拉桿事件
         const updateMarginValue = (input, span) => {
             if (span) span.textContent = input.value;
-            window.imageProcessor.updateCrop();
+            this.debouncedUpdateCrop();
         };
 
         this.topMargin?.addEventListener('input', () => updateMarginValue(this.topMargin, this.topValue));
         this.bottomMargin?.addEventListener('input', () => updateMarginValue(this.bottomMargin, this.bottomValue));
         this.leftMargin?.addEventListener('input', () => updateMarginValue(this.leftMargin, this.leftValue));
         this.rightMargin?.addEventListener('input', () => updateMarginValue(this.rightMargin, this.rightValue));
+        this.topNarrow?.addEventListener('input', () => updateMarginValue(this.topNarrow, this.topNarrowValue));
+        this.bottomNarrow?.addEventListener('input', () => updateMarginValue(this.bottomNarrow, this.bottomNarrowValue));
+        this.rotateAngle?.addEventListener('input', () => updateMarginValue(this.rotateAngle, this.rotateAngleValue));
+
+        // 確保拖曳結束後一定更新預覽
+        this.topMargin?.addEventListener('change', () => window.imageProcessor.updateCrop());
+        this.bottomMargin?.addEventListener('change', () => window.imageProcessor.updateCrop());
+        this.leftMargin?.addEventListener('change', () => window.imageProcessor.updateCrop());
+        this.rightMargin?.addEventListener('change', () => window.imageProcessor.updateCrop());
+        this.topNarrow?.addEventListener('change', () => window.imageProcessor.updateCrop());
+        this.bottomNarrow?.addEventListener('change', () => window.imageProcessor.updateCrop());
+        this.rotateAngle?.addEventListener('change', () => window.imageProcessor.updateCrop());
 
         this.resetCropBtn?.addEventListener('click', () => {
             if (this.topMargin) this.topMargin.value = 0;
             if (this.bottomMargin) this.bottomMargin.value = 0;
             if (this.leftMargin) this.leftMargin.value = 0;
             if (this.rightMargin) this.rightMargin.value = 0;
+            if (this.topNarrow) this.topNarrow.value = 0;
+            if (this.bottomNarrow) this.bottomNarrow.value = 0;
+            if (this.rotateAngle) this.rotateAngle.value = 0;
             
             if (this.topValue) this.topValue.textContent = 0;
             if (this.bottomValue) this.bottomValue.textContent = 0;
             if (this.leftValue) this.leftValue.textContent = 0;
             if (this.rightValue) this.rightValue.textContent = 0;
+            if (this.topNarrowValue) this.topNarrowValue.textContent = 0;
+            if (this.bottomNarrowValue) this.bottomNarrowValue.textContent = 0;
+            if (this.rotateAngleValue) this.rotateAngleValue.textContent = 0;
 
-            window.imageProcessor.updateCrop();
+            this.debouncedUpdateCrop();
         });
     }
+
+    // 依目前輸入更新 UI 顯示（百分比）
+    updateCropRangeLimits() {
+        if (this.topValue) this.topValue.textContent = this.topMargin?.value ?? 0;
+        if (this.bottomValue) this.bottomValue.textContent = this.bottomMargin?.value ?? 0;
+        if (this.leftValue) this.leftValue.textContent = this.leftMargin?.value ?? 0;
+        if (this.rightValue) this.rightValue.textContent = this.rightMargin?.value ?? 0;
+        if (this.topNarrowValue) this.topNarrowValue.textContent = this.topNarrow?.value ?? 0;
+        if (this.bottomNarrowValue) this.bottomNarrowValue.textContent = this.bottomNarrow?.value ?? 0;
+        if (this.rotateAngleValue) this.rotateAngleValue.textContent = this.rotateAngle?.value ?? 0;
+    }
+
+    // 去抖：避免拖拉滑桿時每次都重算 OpenCV
+    debouncedUpdateCrop() {
+        clearTimeout(this._cropTimer);
+        this._cropTimer = setTimeout(() => {
+            window.imageProcessor.updateCrop();
+        }, 80);
+    }
     
-    /**
-     * 啟動相機
-     */
+    /* 啟動相機 */
     async start() {
         console.log('↓ start() ↓');
         if (this.stream) {
@@ -167,9 +208,7 @@ class CameraController {
         console.log('↑ start() ↑');
     }
     
-    /**
-     * 停止相機
-     */
+    /* 停止相機 */
     stop() {
         console.log('↓ stop() ↓');
 
@@ -238,8 +277,8 @@ class CameraController {
             
             console.log('capture() blob:', blob);
             
-            // 處理影像
-            await this.processAndPreview(blob);
+            // 處理影像（拍照會先存檔）
+            await this.processAndPreview(blob, { saveToStatic: true });
             
         } catch (error) {
             console.error('❌ 拍照失敗:', error);
@@ -300,23 +339,61 @@ class CameraController {
         
         console.log('📁 已選擇檔案:', file.name, file.size, 'bytes');
         
-        // 處理影像
-        await this.processAndPreview(file);
+        // 處理影像（選檔不複製到 static/imgs）
+        await this.processAndPreview(file, { saveToStatic: false });
         console.log('↑ processAndPreview() ↑');
         console.log('↑ handleFile() ↑');
     }
+
+    /* 先儲存影像到 static/imgs，再回傳可存取的 URL */
+    async saveImageToStatic(imageSource) {
+        const formData = new FormData();
+        const filename = imageSource?.name || `capture_${Date.now()}.jpg`;
+        formData.append('image', imageSource, filename);
+
+        const response = await fetch('/api/save-image/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': this.getCsrfToken()
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`save-image HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        if (!data.success) {
+            throw new Error(data.error || '影像儲存失敗');
+        }
+
+        return data;
+    }
     
     /* 處理並預覽影像 */
-    async processAndPreview(imageSource) {
+    async processAndPreview(imageSource, { saveToStatic = true } = {}) {
         console.log('↓ processAndPreview() ↓');
         try {
             console.log('processAndPreview() input:', imageSource);
+
+            let processingSource = imageSource;
+            if (saveToStatic) {
+                // 先儲存到 static/imgs，再以儲存後的檔案進行處理
+                const saved = await this.saveImageToStatic(imageSource);
+                this.savedImageUrl = saved.url;
+                const savedResponse = await fetch(saved.url, { cache: 'no-store' });
+                if (!savedResponse.ok) {
+                    throw new Error(`讀取已儲存影像失敗：HTTP ${savedResponse.status}`);
+                }
+                processingSource = await savedResponse.blob();
+            }
 
             /*
             image-processor.js
             ImageProcessor.processImage(imageSource) 處理
             */
-            const result = await window.imageProcessor.processImage(imageSource);
+            const result = await window.imageProcessor.processImage(processingSource);
             console.log('processImage() result:', result);
 
             // 儲存處理後的 Blob
@@ -326,6 +403,7 @@ class CameraController {
 
             // 更新預覽
             this.updatePreview(result);
+            this.updateCropRangeLimits();
             
             console.log('✅ 影像處理完成:', result);
             
@@ -335,9 +413,7 @@ class CameraController {
         }
     }
     
-    /**
-     * 更新預覽區域
-     */
+    /* 更新預覽區域 */
     updatePreview(result) {
         console.log('↓ updatePreview() ↓');
         
@@ -364,9 +440,7 @@ class CameraController {
         console.log('↑ updatePreview() ↑');
     }
     
-    /**
-     * 清空預覽
-     */
+    /* 清空預覽 */
     clearPreview() {
         console.log('↓ clearPreview() ↓');
         
@@ -386,9 +460,7 @@ class CameraController {
         console.log('↑ clearPreview() ↑');
     }
     
-    /**
-     * 上傳影像到後端
-     */
+    /* 上傳影像到後端 */
     async uploadImage() {
         console.log('↓ uploadImage() ↓');
         if (!this.currentBlob) {
@@ -397,14 +469,28 @@ class CameraController {
         }
 
         console.log('forming FormData for upload');
-        
-        // 從裁切後的畫布取得最終影像
-        if (this.canvasCropped) {
+
+        // 從 OCR 裁切畫布取得最終影像（預覽畫布為彩色，OCR 仍用黑白）
+        const ocrCanvas = window.imageProcessor?.getCroppedOcrCanvas?.();
+        if (ocrCanvas) {
+            this.currentBlob = await window.imageProcessor.canvasToBlob(ocrCanvas);
+        } else if (this.canvasCropped) {
             this.currentBlob = await window.imageProcessor.canvasToBlob(this.canvasCropped);
         }
 
+        // 送出前先把 OCR friendly 圖檔存到 static/imgs
+        let saved = null;
+        try {
+            saved = await this.saveImageToStatic(this.currentBlob);
+            this.savedImageUrl = saved.url;
+        } catch (error) {
+            console.error('❌ 儲存 OCR 圖檔失敗:', error);
+            alert('儲存 OCR 圖檔失敗: ' + error.message);
+            return;
+        }
+
         const formData = new FormData();
-        formData.append('image', this.currentBlob, 'invoice.jpg');
+        formData.append('image', this.currentBlob, saved?.filename || 'invoice.jpg');
         console.log('FormData prepared:', formData);
         
         try {
@@ -442,9 +528,7 @@ class CameraController {
         console.log('↑ uploadImage() ↑');
     }
         
-    /**
-     * 取得 CSRF Token
-     */
+    /* 取得 CSRF Token */
     getCsrfToken() {
         console.log('↓ getCsrfToken() ↓');
         const cookieValue = document.cookie

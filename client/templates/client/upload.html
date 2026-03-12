@@ -1,4 +1,4 @@
-<!-- client/templates/client/upload.html -->
+﻿<!-- client/templates/client/upload.html -->
 {% extends 'client/base.html' %}
 {% load static %}
 
@@ -128,27 +128,45 @@
                     <h6 class="fw-bold mb-3 text-white">裁切框調整</h6>
                     <div class="mb-3 text-white">
                         <label class="form-label d-flex justify-content-between">
-                            上邊距 <span id="topValue">0</span> px
+                            上邊距 <span id="topValue">0</span> %
                         </label>
-                        <input type="range" class="form-range" id="topMargin" min="-500" max="500" value="0">
+                        <input type="range" class="form-range" id="topMargin" min="40" max="100" value="70">
                     </div>
                     <div class="mb-3 text-white">
                         <label class="form-label d-flex justify-content-between">
-                            下邊距 <span id="bottomValue">0</span> px
+                            下邊距 <span id="bottomValue">0</span> %
                         </label>
-                        <input type="range" class="form-range" id="bottomMargin" min="-500" max="500" value="0">
+                        <input type="range" class="form-range" id="bottomMargin" min="40" max="100" value="70">
                     </div>
                     <div class="mb-3 text-white">
                         <label class="form-label d-flex justify-content-between">
-                            左邊距 <span id="leftValue">0</span> px
+                            左邊距 <span id="leftValue">0</span> %
                         </label>
-                        <input type="range" class="form-range" id="leftMargin" min="-500" max="500" value="0">
+                        <input type="range" class="form-range" id="leftMargin" min="40" max="100" value="70">
                     </div>
                     <div class="mb-3 text-white">
                         <label class="form-label d-flex justify-content-between">
-                            右邊距 <span id="rightValue">0</span> px
+                            右邊距 <span id="rightValue">0</span> %
                         </label>
-                        <input type="range" class="form-range" id="rightMargin" min="-500" max="500" value="0">
+                        <input type="range" class="form-range" id="rightMargin" min="40" max="100" value="70">
+                    </div>
+                    <div class="mb-3 text-white">
+                        <label class="form-label d-flex justify-content-between">
+                            上邊收縮/外擴<span id="topNarrowValue">0</span> %
+                        </label>
+                            <input type="range" class="form-range" id="topNarrow" min="-50" max="50" value="0">
+                    </div>
+                    <div class="mb-3 text-white">
+                        <label class="form-label d-flex justify-content-between">
+                            下邊收縮/外擴<span id="bottomNarrowValue">0</span> %
+                        </label>
+                            <input type="range" class="form-range" id="bottomNarrow" min="-50" max="50" value="0">
+                    </div>
+                    <div class="mb-3 text-white">
+                        <label class="form-label d-flex justify-content-between">
+                            旋轉角度 (度)<span id="rotateAngleValue">0</span>
+                        </label>
+                            <input type="range" class="form-range" id="rotateAngle" min="-30" max="30" value="0">
                     </div>
                     <div class="d-grid mb-3">
                         <button id="resetCropBtn" class="btn btn-sm btn-outline-light">
@@ -176,6 +194,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'client/js/image-processor.js' %}"></script>
-<script src="{% static 'client/js/camera.js' %}"></script>
+<script src="{% static 'client/js/image-processor.js' %}?v=20260312"></script>
+<script src="{% static 'client/js/camera.js' %}?v=20260312"></script>
 {% endblock %}

@@ -3,8 +3,11 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.conf import settings
 import json
 import logging
+import os
+import uuid
 
 from services.image_adapter import ImageAdapter, ImageAdapterError
 from services.qr_service import QRService
@@ -13,6 +16,45 @@ from services.invoice_parser import InvoiceParser
 from services.classify_service import InvoiceClassifier
 
 logger = logging.getLogger(__name__)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def save_image(request):
+    """
+    將前端上傳的影像儲存到 static/imgs，回傳可存取的靜態 URL
+    """
+    if not request.FILES.get('image'):
+        return JsonResponse({
+            'success': False,
+            'error': '沒有收到影像檔案'
+        }, status=400)
+
+    file = request.FILES['image']
+    _, ext = os.path.splitext(file.name)
+    if not ext:
+        ext = '.jpg'
+
+    save_dir = settings.BASE_DIR / 'static' / 'imgs'
+    os.makedirs(save_dir, exist_ok=True)
+
+    filename = f"capture_{uuid.uuid4().hex}{ext}"
+    save_path = save_dir / filename
+
+    with open(save_path, 'wb') as f:
+        for chunk in file.chunks():
+            f.write(chunk)
+
+    static_base = settings.STATIC_URL
+    if not static_base.startswith('/'):
+        static_base = '/' + static_base
+    url = f"{static_base}imgs/{filename}"
+
+    return JsonResponse({
+        'success': True,
+        'url': url,
+        'filename': filename
+    })
 
 
 @csrf_exempt
