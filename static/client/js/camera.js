@@ -38,20 +38,20 @@ class CameraController {
         this.confirmUploadBtn = document.getElementById('confirmUpload');
 
         // Crop controls
-        this.topMargin = document.getElementById('topMargin');
-        this.bottomMargin = document.getElementById('bottomMargin');
-        this.leftMargin = document.getElementById('leftMargin');
-        this.rightMargin = document.getElementById('rightMargin');
-        this.topValue = document.getElementById('topValue');
-        this.bottomValue = document.getElementById('bottomValue');
-        this.leftValue = document.getElementById('leftValue');
-        this.rightValue = document.getElementById('rightValue');
-        this.topNarrow = document.getElementById('topNarrow');
-        this.bottomNarrow = document.getElementById('bottomNarrow');
-        this.rotateAngle = document.getElementById('rotateAngle');
-        this.topNarrowValue = document.getElementById('topNarrowValue');
-        this.bottomNarrowValue = document.getElementById('bottomNarrowValue');
-        this.rotateAngleValue = document.getElementById('rotateAngleValue');
+        this.topMargin = null;
+        this.bottomMargin = null;
+        this.leftMargin = null;
+        this.rightMargin = null;
+        this.topValue = null;
+        this.bottomValue = null;
+        this.leftValue = null;
+        this.rightValue = null;
+        this.topNarrow = null;
+        this.bottomNarrow = null;
+        this.rotateAngle = null;
+        this.topNarrowValue = null;
+        this.bottomNarrowValue = null;
+        this.rotateAngleValue = null;
         this.resetCropBtn = document.getElementById('resetCropBtn');
         
         // New canvases
@@ -63,6 +63,7 @@ class CameraController {
         this.isStarting = false;
 
         this.initEventListeners();
+        this.initCropTouch();
     }
     
     initEventListeners() {
@@ -80,28 +81,7 @@ class CameraController {
         // 重新整理
         this.reprocessBtn?.addEventListener('click', async () => await window.imageProcessor.reprocess());
 
-        // 裁切拉桿事件
-        const updateMarginValue = (input, span) => {
-            if (span) span.textContent = input.value;
-            this.debouncedUpdateCrop();
-        };
-
-        this.topMargin?.addEventListener('input', () => updateMarginValue(this.topMargin, this.topValue));
-        this.bottomMargin?.addEventListener('input', () => updateMarginValue(this.bottomMargin, this.bottomValue));
-        this.leftMargin?.addEventListener('input', () => updateMarginValue(this.leftMargin, this.leftValue));
-        this.rightMargin?.addEventListener('input', () => updateMarginValue(this.rightMargin, this.rightValue));
-        this.topNarrow?.addEventListener('input', () => updateMarginValue(this.topNarrow, this.topNarrowValue));
-        this.bottomNarrow?.addEventListener('input', () => updateMarginValue(this.bottomNarrow, this.bottomNarrowValue));
-        this.rotateAngle?.addEventListener('input', () => updateMarginValue(this.rotateAngle, this.rotateAngleValue));
-
-        // 確保拖曳結束後一定更新預覽
-        this.topMargin?.addEventListener('change', () => window.imageProcessor.updateCrop());
-        this.bottomMargin?.addEventListener('change', () => window.imageProcessor.updateCrop());
-        this.leftMargin?.addEventListener('change', () => window.imageProcessor.updateCrop());
-        this.rightMargin?.addEventListener('change', () => window.imageProcessor.updateCrop());
-        this.topNarrow?.addEventListener('change', () => window.imageProcessor.updateCrop());
-        this.bottomNarrow?.addEventListener('change', () => window.imageProcessor.updateCrop());
-        this.rotateAngle?.addEventListener('change', () => window.imageProcessor.updateCrop());
+        // 取消裁切拉桿事件（改用拖曳）
 
         this.resetCropBtn?.addEventListener('click', () => {
             if (this.topMargin) this.topMargin.value = 0;
@@ -120,7 +100,7 @@ class CameraController {
             if (this.bottomNarrowValue) this.bottomNarrowValue.textContent = 0;
             if (this.rotateAngleValue) this.rotateAngleValue.textContent = 0;
 
-            this.debouncedUpdateCrop();
+            window.imageProcessor.updateCrop();
         });
     }
 
@@ -141,6 +121,80 @@ class CameraController {
         this._cropTimer = setTimeout(() => {
             window.imageProcessor.updateCrop();
         }, 80);
+    }
+
+    // 觸控/滑鼠拖曳裁切四角
+    initCropTouch() {
+        const canvas = this.canvasResult;
+        if (!canvas) return;
+
+        const getPoints = () => window.imageProcessor.getCropPoints?.();
+        const setPoints = (pts) => window.imageProcessor.setCropPoints?.(pts);
+        let activeIdx = -1;
+        let rafId = null;
+        let pendingPos = null;
+
+        const getPos = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            return { x, y };
+        };
+
+        const hitTest = (pos, pts) => {
+            const r = 70;
+            for (let i = 0; i < pts.length; i++) {
+                const dx = pts[i].x - pos.x;
+                const dy = pts[i].y - pos.y;
+                if (dx * dx + dy * dy <= r * r) return i;
+            }
+            return -1;
+        };
+
+        const onStart = (e) => {
+            const pts = getPoints();
+            if (!pts || pts.length !== 4) return;
+            const pos = getPos(e);
+            activeIdx = hitTest(pos, pts);
+            if (activeIdx !== -1) {
+                e.preventDefault();
+                window.imageProcessor.setDragActive?.(true);
+                if (e.pointerId != null) {
+                    canvas.setPointerCapture(e.pointerId);
+                }
+            }
+        };
+
+        const onMove = (e) => {
+            if (activeIdx === -1) return;
+            pendingPos = getPos(e);
+            if (rafId == null) {
+                rafId = requestAnimationFrame(() => {
+                    const pts = getPoints();
+                    if (pts && pendingPos) {
+                        pts[activeIdx] = { x: pendingPos.x, y: pendingPos.y };
+                        setPoints(pts);
+                    }
+                    rafId = null;
+                });
+            }
+            e.preventDefault();
+        };
+
+        const onEnd = (e) => {
+            activeIdx = -1;
+            window.imageProcessor.setDragActive?.(false);
+            if (e && e.pointerId != null) {
+                try { canvas.releasePointerCapture(e.pointerId); } catch {}
+            }
+        };
+
+        canvas.style.touchAction = 'none';
+        // Pointer Events 支援滑鼠 + 觸控
+        canvas.addEventListener('pointerdown', onStart, { passive: false });
+        canvas.addEventListener('pointermove', onMove, { passive: false });
+        canvas.addEventListener('pointerup', onEnd);
+        canvas.addEventListener('pointercancel', onEnd);
     }
     
     /* 啟動相機 */
@@ -278,7 +332,7 @@ class CameraController {
             console.log('capture() blob:', blob);
             
             // 處理影像（拍照會先存檔）
-            await this.processAndPreview(blob, { saveToStatic: true });
+            await this.processAndPreview(blob, { saveToStatic: true, overwriteOriginal: true });
             
         } catch (error) {
             console.error('❌ 拍照失敗:', error);
@@ -339,17 +393,48 @@ class CameraController {
         
         console.log('📁 已選擇檔案:', file.name, file.size, 'bytes');
         
-        // 處理影像（選檔不複製到 static/imgs）
-        await this.processAndPreview(file, { saveToStatic: false });
+        // 處理影像（選檔會存檔，但不覆蓋原始相片；手機拍照例外）
+        const overwriteOriginal = this.shouldOverwriteOriginalForFile(file);
+        await this.processAndPreview(file, { saveToStatic: true, overwriteOriginal });
         console.log('↑ processAndPreview() ↑');
         console.log('↑ handleFile() ↑');
     }
 
+    isMobileDevice() {
+        return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    }
+
+    shouldOverwriteOriginalForFile(file) {
+        if (!this.isMobileDevice()) return false;
+        const captureAttr = this.fileInput?.getAttribute('capture');
+        if (captureAttr) return true;
+
+        const name = (file?.name || '').toLowerCase();
+        const looksLikeCameraName =
+            name === 'image.jpg' ||
+            name === 'image.jpeg' ||
+            name === 'image.png' ||
+            name.startsWith('img_') ||
+            name.startsWith('image_') ||
+            name.startsWith('capture_');
+        if (!looksLikeCameraName) return false;
+
+        const now = Date.now();
+        const recent = Math.abs(now - (file?.lastModified || 0)) < 2 * 60 * 1000;
+        return recent;
+    }
+
     /* 先儲存影像到 static/imgs，再回傳可存取的 URL */
-    async saveImageToStatic(imageSource) {
+    async saveImageToStatic(imageSource, { overwriteOriginal = false, filename = null } = {}) {
         const formData = new FormData();
-        const filename = imageSource?.name || `capture_${Date.now()}.jpg`;
-        formData.append('image', imageSource, filename);
+        const uploadFilename = imageSource?.name || `capture_${Date.now()}.jpg`;
+        formData.append('image', imageSource, uploadFilename);
+        if (overwriteOriginal) {
+            formData.append('overwrite', '1');
+            if (filename) {
+                formData.append('filename', filename);
+            }
+        }
 
         const response = await fetch('/api/save-image/', {
             method: 'POST',
@@ -372,7 +457,7 @@ class CameraController {
     }
     
     /* 處理並預覽影像 */
-    async processAndPreview(imageSource, { saveToStatic = true } = {}) {
+    async processAndPreview(imageSource, { saveToStatic = true, overwriteOriginal = false } = {}) {
         console.log('↓ processAndPreview() ↓');
         try {
             console.log('processAndPreview() input:', imageSource);
@@ -380,7 +465,10 @@ class CameraController {
             let processingSource = imageSource;
             if (saveToStatic) {
                 // 先儲存到 static/imgs，再以儲存後的檔案進行處理
-                const saved = await this.saveImageToStatic(imageSource);
+                const saved = await this.saveImageToStatic(imageSource, {
+                    overwriteOriginal,
+                    filename: overwriteOriginal ? 'capture_original' : null
+                });
                 this.savedImageUrl = saved.url;
                 const savedResponse = await fetch(saved.url, { cache: 'no-store' });
                 if (!savedResponse.ok) {
@@ -481,7 +569,7 @@ class CameraController {
         // 送出前先把 OCR friendly 圖檔存到 static/imgs
         let saved = null;
         try {
-            saved = await this.saveImageToStatic(this.currentBlob);
+            saved = await this.saveImageToStatic(this.currentBlob, { overwriteOriginal: false });
             this.savedImageUrl = saved.url;
         } catch (error) {
             console.error('❌ 儲存 OCR 圖檔失敗:', error);

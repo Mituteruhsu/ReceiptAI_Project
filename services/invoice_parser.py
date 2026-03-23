@@ -9,7 +9,7 @@ class InvoiceParser:
     """發票解析器"""
     
     @staticmethod
-    def parse_qr(qr_strings: List[str]) -> Dict:
+    def parse_qr(raw_qrs: List[str]) -> Dict:
         """
         解析台灣電子發票 QR Code
         
@@ -23,20 +23,18 @@ class InvoiceParser:
             }
         """
         print("services/invoice_parser.py InvoiceParser.parse_qr() - start")
-        if not qr_strings:
+        if not raw_qrs:
             raise ValueError("QR 資料為空")
-
+        
         header_qr = None
         items_qr = None
 
-        for qr in qr_strings:
+        for qr in raw_qrs:
+            print(f"services/invoice_parser.py InvoiceParser.parse_qr() - processing QR code: {qr}")
             if ':' in qr:
                 items_qr = qr
             else:
                 header_qr = qr
-
-        if not header_qr:
-            raise ValueError("找不到發票 Header QR")
 
         # print(f"services/invoice_parser.py InvoiceParser.parse_qr() - \n\theader_qr: {header_qr}")
         # print(f"services/invoice_parser.py InvoiceParser.parse_qr() - \n\titems_qr: {items_qr}")

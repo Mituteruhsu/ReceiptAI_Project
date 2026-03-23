@@ -83,7 +83,7 @@ class InvoiceClassifier:
         print("services/classify_service.py InvoiceClassifier.classify() - end")
         return {
             'main_category': main_category.value,
-            'main_subcategory': main_subcategory.value,
+            'main_subcategory': main_subcategory.value if main_subcategory else None,
             'items': classified_items
         }
     
@@ -99,6 +99,6 @@ class InvoiceClassifier:
         for category, keywords in InvoiceClassifier.KEYWORDS.items():
             for keyword in keywords:
                 if keyword in item_name:
-                    return category
+                    return None, category
                 
         return  None, Category.OTHER

@@ -4,9 +4,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.conf import settings
+import hashlib
 import json
 import logging
 import os
+import re
 import uuid
 
 from services.image_adapter import ImageAdapter, ImageAdapterError
@@ -31,19 +33,35 @@ def save_image(request):
         }, status=400)
 
     file = request.FILES['image']
+    overwrite = str(request.POST.get('overwrite', '')).lower() in ('1', 'true', 'yes')
+    requested_name = (request.POST.get('filename') or '').strip()
     _, ext = os.path.splitext(file.name)
     if not ext:
-        ext = '.jpg'
+        content_type = (getattr(file, 'content_type', '') or '').lower()
+        if content_type == 'image/png':
+            ext = '.png'
+        elif content_type == 'image/webp':
+            ext = '.webp'
+        else:
+            ext = '.jpg'
 
     save_dir = settings.BASE_DIR / 'static' / 'imgs'
     os.makedirs(save_dir, exist_ok=True)
 
-    filename = f"capture_{uuid.uuid4().hex}{ext}"
+    # 以內容雜湊作為檔名，避免重複儲存同樣的圖
+    file_bytes = file.read()
+    if overwrite:
+        base = os.path.splitext(os.path.basename(requested_name or 'capture_original'))[0]
+        base = re.sub(r'[^A-Za-z0-9_-]+', '', base) or 'capture_original'
+        filename = f"{base}{ext}"
+    else:
+        file_hash = hashlib.sha256(file_bytes).hexdigest()
+        filename = f"capture_{file_hash}{ext}"
     save_path = save_dir / filename
 
+    # 同名時直接覆寫，確保用最新更新
     with open(save_path, 'wb') as f:
-        for chunk in file.chunks():
-            f.write(chunk)
+        f.write(file_bytes)
 
     static_base = settings.STATIC_URL
     if not static_base.startswith('/'):
