@@ -11,9 +11,7 @@ class ImageProcessor {
         this.originalCanvas = document.getElementById('originalCanvas');
         
         // <!-- 處理後影像 -->
-        this.processedCanvas = document.getElementById('processedCanvas');
-                this.originalCtx = this.originalCanvas.getContext('2d', { willReadFrequently: true });
-                this.processedCtx = this.processedCanvas.getContext('2d', { willReadFrequently: true });
+        this.originalCtx = this.originalCanvas.getContext('2d', { willReadFrequently: true });
 
         // New canvases for cropping
         this.canvasResult = document.getElementById('canvasResult');
@@ -22,7 +20,7 @@ class ImageProcessor {
         this.canvasCroppedOcr = document.createElement('canvas');
 
         this.detectedRect = null;
-        this.currentSrc = null; // cv.Mat (Processed Full Image)
+        this.currentSrc = null; // cv.Mat (Processed Cropped Image)
         this.cropPoints = null; // [{x,y} ...] for touch drag
         this.dragActive = false;
         this._lastOcrPreviewTs = 0;
@@ -68,10 +66,7 @@ class ImageProcessor {
     applyProcessing(img) {
         console.log('↓ applyProcessing() ↓');
         
-        // 1. 拍完照片先轉黑白 (全圖預處理)
-        this.fullPreprocess();
-
-        // 2. 不做自動裁切，使用置中的預設框
+        // 1. 不做自動裁切，使用置中的預設框（先裁切再預處理）
         this.setDefaultRect();
         this.updateCrop();
 
@@ -106,62 +101,77 @@ class ImageProcessor {
 
     /* 全圖預處理：純 OpenCV 流程（移除逐像素迴圈） */
     fullPreprocess() {
-        if (!cv) return;
-
-        const autoContrast = document.getElementById('autoContrast')?.checked;
-        const contrastMethod = document.getElementById('contrastMethod')?.value || 'normalize';
-
-        // 流程：RGBA -> 灰階 -> (可選) Normalize -> Adaptive Threshold
+        if (!cv || !this.originalCanvas) return;
         const src = cv.imread(this.originalCanvas);
+        const binary = this.preprocessMat(src, { updatePreview: true });
+        if (binary) {
+            if (this.currentSrc) this.currentSrc.delete();
+            this.currentSrc = binary;
+        }
+        src.delete();
+    }
+
+    preprocessMat(src, { updatePreview = true } = {}) {
+        if (!cv || !src) return null;
+
+        // 流程：RGBA -> 灰階 -> Adaptive Threshold
         const gray = new cv.Mat();
-        const norm = new cv.Mat();
-        const blur = new cv.Mat();
         const binary = new cv.Mat();
-        const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
-        
+
         // 轉灰階
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-        if (autoContrast) {
-            if (contrastMethod === 'clahe' && cv.createCLAHE) {
-                // CLAHE 提升局部對比，對陰影更穩定
-                const clahe = cv.createCLAHE(2.0, new cv.Size(8, 8));
-                clahe.apply(gray, norm);
-                clahe.delete();
-            } else {
-                // Normalize 提升全域對比
-                cv.normalize(gray, norm, 0, 255, cv.NORM_MINMAX);
+        // Shadow and Highlight enhancement（抬升暗部、壓低高光）
+        const shadowBoost = 0.6;   // 0~1，越大越提亮暗部
+        const highlightCut = 0.4;  // 0~1，越大越壓低高光
+        const grayFloat = new cv.Mat();
+        gray.convertTo(grayFloat, cv.CV_32F, 1.0 / 255.0);
+
+        for (let y = 0; y < grayFloat.rows; y++) {
+            for (let x = 0; x < grayFloat.cols; x++) {
+                const v = grayFloat.floatAt(y, x);
+                const shadow = Math.pow(v, 0.6);               // 提亮暗部
+                const highlight = 1.0 - Math.pow(1.0 - v, 0.6); // 壓低高光
+                const mixed = (shadowBoost * shadow) + ((1 - shadowBoost) * v);
+                const out = (1 - highlightCut) * mixed + highlightCut * highlight;
+                grayFloat.floatAt(y, x, out);
             }
-        } else {
-            gray.copyTo(norm);
         }
-        
-        // Adaptive Threshold 轉二值圖
-        // 先做輕微模糊，降低二值化後的噪點
-        cv.GaussianBlur(norm, blur, new cv.Size(5, 5), 0);
 
-        cv.adaptiveThreshold(
-            blur, binary, 255,
-            cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv.THRESH_BINARY,
-            51, 5
-        );
+        grayFloat.convertTo(gray, cv.CV_8U, 255.0);
+        grayFloat.delete();
 
-        // 去除零星雜點
-        cv.morphologyEx(binary, binary, cv.MORPH_OPEN, kernel);
+        // 曝光補償（提升亮度/對比）
+        const exposureComp = 1.2; // 1.0 = 不變，>1 變亮
+        cv.convertScaleAbs(gray, gray, exposureComp, 0);
 
-        // 將預處理後的黑白影像存入 currentSrc (cv.Mat，單通道)
+        // 曝光後二值化（Otsu）
+        cv.threshold(gray, binary, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+        gray.delete();
+        return binary;
+    }
+
+    updateOcrFromBinary(binary, outW, outH, { updateCroppedPreview = true } = {}) {
+        if (!binary) return;
         if (this.currentSrc) this.currentSrc.delete();
-        this.currentSrc = binary.clone();
+        this.currentSrc = binary;
 
-        src.delete(); gray.delete(); norm.delete(); blur.delete(); binary.delete(); kernel.delete();
+        this.canvasCroppedOcr.width = outW;
+        this.canvasCroppedOcr.height = outH;
+        cv.imshow(this.canvasCroppedOcr, binary);
+
+        if (updateCroppedPreview) {
+            this.canvasCropped.width = outW;
+            this.canvasCropped.height = outH;
+            cv.imshow(this.canvasCropped, binary);
+        }
     }
 
     // 預設置中框（約 70%）
     setDefaultRect() {
-        if (!this.currentSrc || !this.originalCanvas) return;
-        const w = this.originalCanvas.width || this.currentSrc.cols;
-        const h = this.originalCanvas.height || this.currentSrc.rows;
+        if (!this.originalCanvas) return;
+        const w = this.originalCanvas.width;
+        const h = this.originalCanvas.height;
         const rectW = Math.floor(w * 0.7);
         const rectH = Math.floor(h * 0.7);
         const x = Math.floor((w - rectW) / 2);
@@ -229,7 +239,7 @@ class ImageProcessor {
     }
 
     updateCrop() {
-        if (!this.detectedRect || !this.currentSrc) return;
+        if (!cv || !this.detectedRect || !this.originalCanvas) return;
 
         // 70% 為基準，100% 代表從 70% 放大到 100%，每邊只需 +15%
         // 所以需要除以 200（而不是 100）
@@ -242,8 +252,8 @@ class ImageProcessor {
         const rotateAngle = 0;
 
         // 以原圖尺寸為基準，並以 detectedRect 為中心進行擴張
-        const baseW = this.originalCanvas?.width || this.currentSrc.cols;
-        const baseH = this.originalCanvas?.height || this.currentSrc.rows;
+        const baseW = this.originalCanvas?.width || (this.currentSrc ? this.currentSrc.cols : 0);
+        const baseH = this.originalCanvas?.height || (this.currentSrc ? this.currentSrc.rows : 0);
 
         const top = Math.round(baseH * topPct);
         const bottom = Math.round(baseH * bottomPct);
@@ -272,11 +282,7 @@ class ImageProcessor {
 
         if (cropWidth <= 1 || cropHeight <= 1) return;
 
-        const srcBinary = this.currentSrc;
         const srcColor = cv.imread(this.originalCanvas);
-
-        let rect = new cv.Rect(cropX, cropY, cropWidth, cropHeight);
-        let croppedMat = srcBinary.roi(rect);
 
         // 生成梯形 + 旋轉後的四點
         const maxNarrow = Math.max(0, Math.floor(cropWidth / 2) - 10);
@@ -321,10 +327,11 @@ class ImageProcessor {
         const pointsOk = [tl, tr, br, bl].every(p => Number.isFinite(p.x) && Number.isFinite(p.y));
         if (!pointsOk) {
             // fallback: 使用矩形裁切與原圖預覽
-            this.canvasCropped.width = cropWidth;
-            this.canvasCropped.height = cropHeight;
-            const croppedCtx = this.canvasCropped.getContext('2d', { willReadFrequently: true });
-            croppedCtx.drawImage(this.originalCanvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+            const rect = new cv.Rect(cropX, cropY, cropWidth, cropHeight);
+            const croppedColor = srcColor.roi(rect);
+            const binary = this.preprocessMat(croppedColor, { updatePreview: true });
+            this.updateOcrFromBinary(binary, cropWidth, cropHeight, { updateCroppedPreview: true });
+            croppedColor.delete();
 
             this.canvasResult.width = baseW;
             this.canvasResult.height = baseH;
@@ -333,12 +340,6 @@ class ImageProcessor {
             resultCtx.strokeStyle = 'rgb(255, 0, 0)';
             resultCtx.lineWidth = 6;
             resultCtx.strokeRect(cropX, cropY, cropWidth, cropHeight);
-
-            this.canvasCroppedOcr.width = cropWidth;
-            this.canvasCroppedOcr.height = cropHeight;
-            cv.imshow(this.canvasCroppedOcr, croppedMat);
-
-            croppedMat.delete();
             srcColor.delete();
             return;
         }
@@ -352,20 +353,10 @@ class ImageProcessor {
         ]);
         const M = cv.getPerspectiveTransform(srcPts, dstPts);
 
-        const warpedBinary = new cv.Mat();
         const warpedColor = new cv.Mat();
-        cv.warpPerspective(srcBinary, warpedBinary, M, new cv.Size(cropWidth, cropHeight));
         cv.warpPerspective(srcColor, warpedColor, M, new cv.Size(cropWidth, cropHeight));
-
-        // OCR 用裁切（黑白）
-        this.canvasCroppedOcr.width = cropWidth;
-        this.canvasCroppedOcr.height = cropHeight;
-        cv.imshow(this.canvasCroppedOcr, warpedBinary);
-
-        // 預覽用裁切：顯示 OCR Friendly（黑白）結果
-        this.canvasCropped.width = cropWidth;
-        this.canvasCropped.height = cropHeight;
-        cv.imshow(this.canvasCropped, warpedBinary);
+        const binary = this.preprocessMat(warpedColor, { updatePreview: true });
+        this.updateOcrFromBinary(binary, cropWidth, cropHeight, { updateCroppedPreview: true });
 
         // 預覽結果使用原始影像，疊加紅色方框
         this.canvasResult.width = srcColor.cols;
@@ -385,12 +376,10 @@ class ImageProcessor {
         }
         cv.imshow(this.canvasResult, overlay);
 
-        croppedMat.delete();
         srcColor.delete();
         srcPts.delete();
         dstPts.delete();
         M.delete();
-        warpedBinary.delete();
         warpedColor.delete();
         overlay.delete();
 
@@ -403,7 +392,7 @@ class ImageProcessor {
     }
 
     updateCropWithPoints(points) {
-        if (!this.originalCanvas || !this.currentSrc) return;
+        if (!cv || !this.originalCanvas) return;
         const baseW = this.originalCanvas.width;
         const baseH = this.originalCanvas.height;
         const clampPoint = (p) => ({
@@ -446,21 +435,13 @@ class ImageProcessor {
         ]);
         const M = cv.getPerspectiveTransform(srcPts, dstPts);
 
-        const warpedBinary = new cv.Mat();
-        cv.warpPerspective(this.currentSrc, warpedBinary, M, new cv.Size(outW, outH));
-
-        // OCR friendly 預覽
-        this.canvasCropped.width = outW;
-        this.canvasCropped.height = outH;
-        cv.imshow(this.canvasCropped, warpedBinary);
-
-        // OCR 送出
-        this.canvasCroppedOcr.width = outW;
-        this.canvasCroppedOcr.height = outH;
-        cv.imshow(this.canvasCroppedOcr, warpedBinary);
+        const srcColor = cv.imread(this.originalCanvas);
+        const warpedColor = new cv.Mat();
+        cv.warpPerspective(srcColor, warpedColor, M, new cv.Size(outW, outH));
+        const binary = this.preprocessMat(warpedColor, { updatePreview: true });
+        this.updateOcrFromBinary(binary, outW, outH, { updateCroppedPreview: true });
 
         // 原圖紅框 + 角點
-        const srcColor = cv.imread(this.originalCanvas);
         this.canvasResult.width = baseW;
         this.canvasResult.height = baseH;
         const overlay = srcColor.clone();
@@ -481,7 +462,7 @@ class ImageProcessor {
         srcPts.delete();
         dstPts.delete();
         M.delete();
-        warpedBinary.delete();
+        warpedColor.delete();
         overlay.delete();
     }
 
@@ -518,9 +499,18 @@ class ImageProcessor {
         img.src = this.originalCanvas.toDataURL();
     }
 
+    // 更新 OCR friendly + 預覽（用於切換對比方式）
+    reprocessWithPreview() {
+        if (!this.originalCanvas || !this.originalCanvas.width || !this.originalCanvas.height) return;
+        if (this.cropPoints && this.cropPoints.length === 4) {
+            this.updateCropWithPoints(this.cropPoints);
+        } else if (this.detectedRect) {
+            this.updateCrop();
+        }
+    }
+
     // 只更新 OCR friendly（不更新預覽畫布）
     reprocessOcrOnly() {
-        this.fullPreprocess();
         if (this.cropPoints && this.cropPoints.length === 4) {
             this.updateOcrOnlyFromPoints(this.cropPoints);
             return;
@@ -538,7 +528,7 @@ class ImageProcessor {
     }
 
     updateOcrOnlyFromPoints(points) {
-        if (!this.originalCanvas || !this.currentSrc || !points || points.length !== 4) return;
+        if (!cv || !this.originalCanvas || !points || points.length !== 4) return;
         const baseW = this.originalCanvas.width;
         const baseH = this.originalCanvas.height;
         const clampPoint = (p) => ({
@@ -563,17 +553,17 @@ class ImageProcessor {
         ]);
         const M = cv.getPerspectiveTransform(srcPts, dstPts);
 
-        const warpedBinary = new cv.Mat();
-        cv.warpPerspective(this.currentSrc, warpedBinary, M, new cv.Size(outW, outH));
+        const srcColor = cv.imread(this.originalCanvas);
+        const warpedColor = new cv.Mat();
+        cv.warpPerspective(srcColor, warpedColor, M, new cv.Size(outW, outH));
+        const binary = this.preprocessMat(warpedColor, { updatePreview: false });
+        this.updateOcrFromBinary(binary, outW, outH, { updateCroppedPreview: false });
 
-        this.canvasCroppedOcr.width = outW;
-        this.canvasCroppedOcr.height = outH;
-        cv.imshow(this.canvasCroppedOcr, warpedBinary);
-
+        srcColor.delete();
         srcPts.delete();
         dstPts.delete();
         M.delete();
-        warpedBinary.delete();
+        warpedColor.delete();
     }
 }
 

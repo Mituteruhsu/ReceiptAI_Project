@@ -23,7 +23,6 @@ class CameraController {
         this.originalCanvas = document.getElementById('originalCanvas');
 
         // <!-- 處理後影像 -->
-        this.processedCanvas = document.getElementById('processedCanvas');
 
         // <!-- 影像資訊 -->
         this.imageInfo = document.getElementById('imageInfo');
@@ -33,7 +32,6 @@ class CameraController {
 
         // <!-- 處理選項 -->
         this.processOptions = document.getElementById('processOptions');
-        this.autoContrast = document.getElementById('autoContrast');
         this.reprocessBtn = document.getElementById('reprocess');
         this.confirmUploadBtn = document.getElementById('confirmUpload');
 
@@ -515,8 +513,7 @@ class CameraController {
         this.canvasResult?.classList.remove('d-none');
         this.canvasCropped?.classList.remove('d-none');
         
-        // 隱藏舊的處理畫布
-        this.processedCanvas?.classList.add('d-none');
+        // 顯示灰階/對比預覽
         
         // 更新影像資訊
         this.imageDimensions.textContent = `${result.width} × ${result.height}`;
@@ -538,7 +535,6 @@ class CameraController {
         
         if (this.canvasResult) this.canvasResult.classList.add('d-none');
         if (this.canvasCropped) this.canvasCropped.classList.add('d-none');
-        if (this.processedCanvas) this.processedCanvas.classList.add('d-none');
         if (this.imageInfo) this.imageInfo.classList.add('d-none');
         if (this.processOptions) this.processOptions.classList.add('d-none');
 

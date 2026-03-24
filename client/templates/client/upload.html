@@ -88,8 +88,6 @@
                 <!-- 原始影像（隱藏） -->
                 <canvas id="originalCanvas" class="d-none"></canvas>
                 
-                <!-- 處理後影像 -->
-                <canvas id="processedCanvas" class="d-none w-100 rounded shadow-sm"></canvas>
                 
                 <!-- 影像資訊 -->
                 <div id="imageInfo" class="d-none">
@@ -116,20 +114,6 @@
                 <!-- 處理選項 -->
                 <div id="processOptions" class="d-none">
                     <h6 class="fw-bold mb-3 text-white">影像增強選項</h6>
-                    
-                    <div class="form-check mb-2 text-white">
-                        <input class="form-check-input" type="checkbox" id="autoContrast" checked>
-                        <label class="form-check-label" for="autoContrast">
-                            自動對比增強
-                        </label>
-                    </div>
-                    <div class="mb-3">
-                        <label for="contrastMethod" class="form-label text-white mb-1">對比方式</label>
-                        <select id="contrastMethod" class="form-select form-select-sm">
-                            <option value="normalize" selected>Normalize</option>
-                            <option value="clahe">CLAHE</option>
-                        </select>
-                    </div>
 
                     <div class="d-grid mb-3">
                         <button id="resetCropBtn" class="btn btn-sm btn-outline-light">
@@ -157,6 +141,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'client/js/image-processor.js' %}?v=20260312b"></script>
-<script src="{% static 'client/js/camera.js' %}?v=20260312b"></script>
+<script src="{% static 'client/js/image-processor.js' %}?v=20260324b"></script>
+<script src="{% static 'client/js/camera.js' %}?v=20260324b"></script>
 {% endblock %}
